@@ -9,12 +9,12 @@ import java.time.Instant;
 @AllArgsConstructor
 public class StockQuote {
 
-    private final String requestedSymbol;
-    private final String symbol;
-    private final Boolean changed;
+    public String requestedSymbol;
+    public final String symbol;
+    public final Boolean changed;
 
-    private final StockQuoteData data;
+    public final StockQuoteData data;
 
-    private final Instant requestedAt;
-    private final Long took;
+    public final Instant requestedAt;
+    public final Long took;
 }
