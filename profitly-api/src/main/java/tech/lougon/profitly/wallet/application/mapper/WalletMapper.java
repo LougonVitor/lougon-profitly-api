@@ -1,8 +1,10 @@
 package tech.lougon.profitly.wallet.application.mapper;
 
 import org.springframework.stereotype.Component;
+import tech.lougon.profitly.wallet.application.dto.PositionEntryDTO;
 import tech.lougon.profitly.wallet.application.dto.WalletPositionSummaryDTO;
 import tech.lougon.profitly.wallet.application.dto.WalletSummaryDTO;
+import tech.lougon.profitly.wallet.domain.model.PositionEntry;
 import tech.lougon.profitly.wallet.domain.model.Wallet;
 import tech.lougon.profitly.wallet.domain.model.WalletPosition;
 import tech.lougon.profitly.wallet.domain.port.StockMarketData;
@@ -48,12 +50,14 @@ public class WalletMapper {
     }
 
     private WalletPositionSummaryDTO toPositionSummaryDTO(WalletPosition position, StockMarketData marketData) {
-        BigDecimal price = marketData != null ? marketData.currentPrice() : BigDecimal.ZERO;
+        BigDecimal currentPrice = marketData != null ? marketData.currentPrice() : BigDecimal.ZERO;
         String logoUrl = marketData != null ? marketData.logoUrl() : null;
-        BigDecimal qty = BigDecimal.valueOf(position.quantity());
 
-        BigDecimal totalInvested = position.averagePrice().multiply(qty);
-        BigDecimal currentValue = price.multiply(qty);
+        BigDecimal averagePrice = position.averagePrice();
+        BigDecimal qty = BigDecimal.valueOf(position.totalQuantity());
+
+        BigDecimal totalInvested = averagePrice.multiply(qty);
+        BigDecimal currentValue = currentPrice.multiply(qty);
         BigDecimal profitOrLoss = currentValue.subtract(totalInvested);
 
         BigDecimal profitOrLossPercent = totalInvested.compareTo(BigDecimal.ZERO) == 0
@@ -61,17 +65,27 @@ public class WalletMapper {
                 : profitOrLoss.divide(totalInvested, 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100));
 
+        List<PositionEntryDTO> entries = position.entries().stream()
+                .map(this::toEntryDTO)
+                .toList();
+
         return new WalletPositionSummaryDTO(
                 position.id(),
                 position.ticker(),
                 logoUrl,
-                position.quantity(),
-                position.averagePrice(),
-                price,
+                position.totalQuantity(),
+                averagePrice,
+                currentPrice,
                 totalInvested,
                 currentValue,
                 profitOrLoss,
-                profitOrLossPercent
+                profitOrLossPercent,
+                entries
         );
+    }
+
+    private PositionEntryDTO toEntryDTO(PositionEntry entry) {
+        BigDecimal total = entry.paidPrice().multiply(BigDecimal.valueOf(entry.quantity()));
+        return new PositionEntryDTO(entry.id(), entry.date(), entry.quantity(), entry.paidPrice(), total);
     }
 }
