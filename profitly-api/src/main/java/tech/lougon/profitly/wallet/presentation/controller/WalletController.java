@@ -3,7 +3,8 @@ package tech.lougon.profitly.wallet.presentation.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tech.lougon.profitly.wallet.application.service.WalletService;
-import tech.lougon.profitly.wallet.presentation.request.AddPositionRequest;
+import tech.lougon.profitly.wallet.presentation.request.AddEntryRequest;
+import tech.lougon.profitly.wallet.presentation.request.UpdateEntryRequest;
 import tech.lougon.profitly.wallet.presentation.response.WalletSummaryResponse;
 
 import java.util.List;
@@ -29,20 +30,42 @@ public class WalletController {
 
     @GetMapping("/{id}")
     public ResponseEntity<WalletSummaryResponse> findById(@PathVariable String id) {
-        return walletService.findById(id)
-                .map(WalletSummaryResponse::from)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.findById(id)));
     }
 
-    @PostMapping("/{walletId}/positions")
-    public ResponseEntity<WalletSummaryResponse> addPosition(
+    @PostMapping("/{walletId}/positions/{ticker}/entries")
+    public ResponseEntity<WalletSummaryResponse> addEntry(
             @PathVariable String walletId,
-            @RequestBody AddPositionRequest request
+            @PathVariable String ticker,
+            @RequestBody AddEntryRequest request
     ) {
-        WalletSummaryResponse response = WalletSummaryResponse.from(
-                walletService.addPosition(walletId, request)
-        );
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.addEntry(walletId, ticker, request)));
+    }
+
+    @PutMapping("/{walletId}/positions/{ticker}/entries/{entryId}")
+    public ResponseEntity<WalletSummaryResponse> updateEntry(
+            @PathVariable String walletId,
+            @PathVariable String ticker,
+            @PathVariable String entryId,
+            @RequestBody UpdateEntryRequest request
+    ) {
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.updateEntry(walletId, entryId, request)));
+    }
+
+    @DeleteMapping("/{walletId}/positions/{ticker}/entries/{entryId}")
+    public ResponseEntity<WalletSummaryResponse> deleteEntry(
+            @PathVariable String walletId,
+            @PathVariable String ticker,
+            @PathVariable String entryId
+    ) {
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.deleteEntry(walletId, entryId)));
+    }
+
+    @DeleteMapping("/{walletId}/positions/{ticker}")
+    public ResponseEntity<WalletSummaryResponse> deletePosition(
+            @PathVariable String walletId,
+            @PathVariable String ticker
+    ) {
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.deletePosition(walletId, ticker)));
     }
 }
