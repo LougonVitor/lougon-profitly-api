@@ -3,6 +3,7 @@ package tech.lougon.profitly.stock.infrastructure.client;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiQuoteResponse;
+import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiTickerListResponse;
 
 import java.util.List;
 
@@ -28,6 +29,13 @@ public class BrapiStockClient {
         return webClient.get().uri("/api/v2/stocks/quote?symbols={symbols}", symbols)
                 .retrieve()
                 .bodyToMono(BrapiQuoteResponse.class)
+                .block();
+    }
+
+    public BrapiTickerListResponse fetchTickerList() {
+        return webClient.get().uri("/api/quote/list")
+                .retrieve()
+                .bodyToMono(BrapiTickerListResponse.class)
                 .block();
     }
 }
