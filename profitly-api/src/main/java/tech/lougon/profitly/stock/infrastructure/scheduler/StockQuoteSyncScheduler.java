@@ -24,12 +24,6 @@ public class StockQuoteSyncScheduler {
         this.stockService = stockService;
     }
 
-    @Scheduled(cron = "${profitly.scheduler.stock-sync-cron}")
-    public void syncStocksEveryTenMinutes() {
-        log.info("Starting 10-minute stock sync for {} tickers", TICKERS.size());
-        sync();
-    }
-
     @Scheduled(cron = "${profitly.scheduler.stock-sync-hourly-cron}")
     public void syncStocksEveryHour() {
         log.info("Starting hourly stock sync for {} tickers", TICKERS.size());
