@@ -16,7 +16,7 @@ public class BrapiStockClient {
     }
 
     public BrapiQuoteResponse fetchQuote(String ticker) {
-        return webClient.get().uri("/api/v2/stocks/quote?symbol={ticker}", ticker)
+        return webClient.get().uri("/api/v2/stocks/quote?symbols={ticker}", ticker)
                 .retrieve()
                 .bodyToMono(BrapiQuoteResponse.class)
                 .block();
@@ -25,7 +25,7 @@ public class BrapiStockClient {
     public BrapiQuoteResponse fetchQuotes(List<String> tickers) {
         String symbols = String.join(",", tickers);
 
-        return webClient.get().uri("/api/v2/stocks/quote?symbol={symbols}", symbols)
+        return webClient.get().uri("/api/v2/stocks/quote?symbols={symbols}", symbols)
                 .retrieve()
                 .bodyToMono(BrapiQuoteResponse.class)
                 .block();
