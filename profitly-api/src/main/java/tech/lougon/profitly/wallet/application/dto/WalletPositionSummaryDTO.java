@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 public record WalletPositionSummaryDTO(
         String id,
         String ticker,
+        String logoUrl,
         Integer quantity,
         BigDecimal averagePrice,
         BigDecimal currentPrice,
