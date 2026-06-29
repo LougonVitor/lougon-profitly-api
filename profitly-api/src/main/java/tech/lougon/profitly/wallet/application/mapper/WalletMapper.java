@@ -5,6 +5,7 @@ import tech.lougon.profitly.wallet.application.dto.WalletPositionSummaryDTO;
 import tech.lougon.profitly.wallet.application.dto.WalletSummaryDTO;
 import tech.lougon.profitly.wallet.domain.model.Wallet;
 import tech.lougon.profitly.wallet.domain.model.WalletPosition;
+import tech.lougon.profitly.wallet.domain.port.StockMarketData;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -14,9 +15,9 @@ import java.util.Map;
 @Component
 public class WalletMapper {
 
-    public WalletSummaryDTO toSummaryDTO(Wallet wallet, Map<String, BigDecimal> priceByTicker) {
+    public WalletSummaryDTO toSummaryDTO(Wallet wallet, Map<String, StockMarketData> marketDataByTicker) {
         List<WalletPositionSummaryDTO> positions = wallet.positions().stream()
-                .map(position -> toPositionSummaryDTO(position, priceByTicker.get(position.ticker())))
+                .map(position -> toPositionSummaryDTO(position, marketDataByTicker.get(position.ticker())))
                 .toList();
 
         BigDecimal totalInvested = positions.stream()
@@ -46,8 +47,9 @@ public class WalletMapper {
         );
     }
 
-    private WalletPositionSummaryDTO toPositionSummaryDTO(WalletPosition position, BigDecimal currentPrice) {
-        BigDecimal price = currentPrice != null ? currentPrice : BigDecimal.ZERO;
+    private WalletPositionSummaryDTO toPositionSummaryDTO(WalletPosition position, StockMarketData marketData) {
+        BigDecimal price = marketData != null ? marketData.currentPrice() : BigDecimal.ZERO;
+        String logoUrl = marketData != null ? marketData.logoUrl() : null;
         BigDecimal qty = BigDecimal.valueOf(position.quantity());
 
         BigDecimal totalInvested = position.averagePrice().multiply(qty);
@@ -62,6 +64,7 @@ public class WalletMapper {
         return new WalletPositionSummaryDTO(
                 position.id(),
                 position.ticker(),
+                logoUrl,
                 position.quantity(),
                 position.averagePrice(),
                 price,
