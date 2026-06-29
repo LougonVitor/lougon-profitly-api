@@ -1,8 +1,11 @@
 package tech.lougon.profitly.wallet.presentation.response;
 
+import tech.lougon.profitly.wallet.application.dto.PositionEntryDTO;
 import tech.lougon.profitly.wallet.application.dto.WalletPositionSummaryDTO;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 
 public record WalletPositionSummaryResponse(
         String id,
@@ -14,9 +17,13 @@ public record WalletPositionSummaryResponse(
         BigDecimal totalInvested,
         BigDecimal currentValue,
         BigDecimal profitOrLoss,
-        BigDecimal profitOrLossPercent
+        BigDecimal profitOrLossPercent,
+        List<PositionEntryResponse> entries
 ) {
     public static WalletPositionSummaryResponse from(WalletPositionSummaryDTO dto) {
+        List<PositionEntryResponse> entries = dto.entries().stream()
+                .map(PositionEntryResponse::from)
+                .toList();
         return new WalletPositionSummaryResponse(
                 dto.id(),
                 dto.ticker(),
@@ -27,7 +34,20 @@ public record WalletPositionSummaryResponse(
                 dto.totalInvested(),
                 dto.currentValue(),
                 dto.profitOrLoss(),
-                dto.profitOrLossPercent()
+                dto.profitOrLossPercent(),
+                entries
         );
+    }
+
+    public record PositionEntryResponse(
+            String id,
+            LocalDate date,
+            Integer quantity,
+            BigDecimal paidPrice,
+            BigDecimal total
+    ) {
+        public static PositionEntryResponse from(PositionEntryDTO dto) {
+            return new PositionEntryResponse(dto.id(), dto.date(), dto.quantity(), dto.paidPrice(), dto.total());
+        }
     }
 }
