@@ -1,8 +1,10 @@
 package tech.lougon.profitly.wallet.infrastructure.persistence.mapper;
 
 import org.springframework.stereotype.Component;
+import tech.lougon.profitly.wallet.domain.model.PositionEntry;
 import tech.lougon.profitly.wallet.domain.model.Wallet;
 import tech.lougon.profitly.wallet.domain.model.WalletPosition;
+import tech.lougon.profitly.wallet.infrastructure.persistence.PositionEntryJpaEntity;
 import tech.lougon.profitly.wallet.infrastructure.persistence.WalletJpaEntity;
 import tech.lougon.profitly.wallet.infrastructure.persistence.WalletPositionJpaEntity;
 
@@ -41,12 +43,26 @@ public class InfraWalletMapper {
     }
 
     private WalletPosition toPositionDomain(WalletPositionJpaEntity entity) {
+        List<PositionEntry> entries = entity.getEntries().stream()
+                .map(e -> toEntryDomain(e, entity.getId()))
+                .toList();
+
         return new WalletPosition(
                 entity.getId(),
                 entity.getWallet().getId(),
                 entity.getTicker(),
+                entries,
+                entity.getCreatedAt()
+        );
+    }
+
+    private PositionEntry toEntryDomain(PositionEntryJpaEntity entity, String walletPositionId) {
+        return new PositionEntry(
+                entity.getId(),
+                walletPositionId,
+                entity.getDate(),
                 entity.getQuantity(),
-                entity.getAveragePrice(),
+                entity.getPaidPrice(),
                 entity.getCreatedAt()
         );
     }
@@ -56,9 +72,24 @@ public class InfraWalletMapper {
         entity.setId(position.id());
         entity.setWallet(walletEntity);
         entity.setTicker(position.ticker());
-        entity.setQuantity(position.quantity());
-        entity.setAveragePrice(position.averagePrice());
         entity.setCreatedAt(position.createdAt());
+
+        List<PositionEntryJpaEntity> entryEntities = position.entries().stream()
+                .map(e -> toEntryEntity(e, entity))
+                .toList();
+
+        entity.setEntries(entryEntities);
+        return entity;
+    }
+
+    private PositionEntryJpaEntity toEntryEntity(PositionEntry entry, WalletPositionJpaEntity positionEntity) {
+        PositionEntryJpaEntity entity = new PositionEntryJpaEntity();
+        entity.setId(entry.id());
+        entity.setWalletPosition(positionEntity);
+        entity.setDate(entry.date());
+        entity.setQuantity(entry.quantity());
+        entity.setPaidPrice(entry.paidPrice());
+        entity.setCreatedAt(entry.createdAt());
         return entity;
     }
 }
