@@ -2,7 +2,7 @@ package tech.lougon.profitly.stock.application.service;
 
 import org.springframework.stereotype.Service;
 import tech.lougon.profitly.stock.application.dto.StockQuoteDTO;
-import tech.lougon.profitly.stock.application.mapper.StockQuoteMapper;
+import tech.lougon.profitly.stock.application.mapper.ApiStockQuoteMapper;
 import tech.lougon.profitly.stock.domain.model.StockQuote;
 import tech.lougon.profitly.stock.domain.repository.StockRepository;
 import tech.lougon.profitly.stock.infrastructure.client.BrapiStockClient;
@@ -16,12 +16,12 @@ public class StockQuoteService {
 
     private final StockRepository stockRepository;
     private final BrapiStockClient brapiStockClient;
-    private final StockQuoteMapper stockMapper;
+    private final ApiStockQuoteMapper stockMapper;
 
     public StockQuoteService(
             StockRepository stockRepository,
             BrapiStockClient brapiStockClient,
-            StockQuoteMapper stockMapper
+            ApiStockQuoteMapper stockMapper
     ) {
         this.stockRepository = stockRepository;
         this.brapiStockClient = brapiStockClient;

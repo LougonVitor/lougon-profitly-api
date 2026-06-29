@@ -3,7 +3,7 @@ package tech.lougon.profitly.stock.infrastructure.persistence;
 import org.springframework.stereotype.Repository;
 import tech.lougon.profitly.stock.domain.model.StockQuote;
 import tech.lougon.profitly.stock.domain.repository.StockRepository;
-import tech.lougon.profitly.stock.infrastructure.persistence.mapper.StockQuoteMapper;
+import tech.lougon.profitly.stock.infrastructure.persistence.mapper.InfraStockQuoteMapper;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,9 +12,9 @@ import java.util.Optional;
 public class StockQuoteRepositoryImpl implements StockRepository {
 
     private final JpaStockQuoteRepository jpaStockRepository;
-    private final StockQuoteMapper quoteMapper;
+    private final InfraStockQuoteMapper quoteMapper;
 
-    public StockQuoteRepositoryImpl(JpaStockQuoteRepository jpaStockRepository, StockQuoteMapper stockQuoteMapper) {
+    public StockQuoteRepositoryImpl(JpaStockQuoteRepository jpaStockRepository, InfraStockQuoteMapper stockQuoteMapper) {
         this.jpaStockRepository = jpaStockRepository;
         this.quoteMapper = stockQuoteMapper;
     }

@@ -7,7 +7,7 @@ import tech.lougon.profitly.stock.domain.model.StockQuoteData;
 import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiQuoteResponse;
 
 @Component
-public class StockQuoteMapper {
+public class ApiStockQuoteMapper {
 
     public StockQuoteDTO toDTO(StockQuote stockQuote) {
         return new StockQuoteDTO(

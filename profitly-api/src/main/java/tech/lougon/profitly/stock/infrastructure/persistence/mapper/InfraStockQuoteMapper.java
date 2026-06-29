@@ -1,10 +1,12 @@
 package tech.lougon.profitly.stock.infrastructure.persistence.mapper;
 
+import org.springframework.stereotype.Component;
 import tech.lougon.profitly.stock.domain.model.StockQuote;
 import tech.lougon.profitly.stock.domain.model.StockQuoteData;
 import tech.lougon.profitly.stock.infrastructure.persistence.StockQuoteJpaEntity;
 
-public class StockQuoteMapper {
+@Component
+public class InfraStockQuoteMapper {
     public StockQuote toDomain(StockQuoteJpaEntity entity) {
         StockQuoteData data = new StockQuoteData(
                 entity.getShortName(),
