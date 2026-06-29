@@ -3,6 +3,7 @@ package tech.lougon.profitly.wallet.presentation.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tech.lougon.profitly.wallet.application.service.WalletService;
+import tech.lougon.profitly.wallet.presentation.request.AddPositionRequest;
 import tech.lougon.profitly.wallet.presentation.response.WalletSummaryResponse;
 
 import java.util.List;
@@ -32,5 +33,16 @@ public class WalletController {
                 .map(WalletSummaryResponse::from)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{walletId}/positions")
+    public ResponseEntity<WalletSummaryResponse> addPosition(
+            @PathVariable String walletId,
+            @RequestBody AddPositionRequest request
+    ) {
+        WalletSummaryResponse response = WalletSummaryResponse.from(
+                walletService.addPosition(walletId, request)
+        );
+        return ResponseEntity.ok(response);
     }
 }
