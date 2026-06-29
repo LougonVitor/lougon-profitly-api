@@ -1,6 +1,7 @@
 package tech.lougon.profitly.wallet.application.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record WalletPositionSummaryDTO(
         String id,
@@ -12,5 +13,6 @@ public record WalletPositionSummaryDTO(
         BigDecimal totalInvested,
         BigDecimal currentValue,
         BigDecimal profitOrLoss,
-        BigDecimal profitOrLossPercent
+        BigDecimal profitOrLossPercent,
+        List<PositionEntryDTO> entries
 ) {}
