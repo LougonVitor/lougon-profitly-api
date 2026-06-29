@@ -9,6 +9,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/stocks/quote")
+@CrossOrigin(origins = "http://localhost:5173")
 public class StockQuoteController {
 
     private final StockQuoteService stockService;
