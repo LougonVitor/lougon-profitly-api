@@ -1,7 +1,7 @@
-package tech.lougon.profitly.stock.service.mapper;
+package tech.lougon.profitly.stock.application.mapper;
 
 import org.springframework.stereotype.Component;
-import tech.lougon.profitly.stock.service.dto.StockQuoteDTO;
+import tech.lougon.profitly.stock.application.dto.StockQuoteDTO;
 import tech.lougon.profitly.stock.domain.model.StockQuote;
 import tech.lougon.profitly.stock.domain.model.StockQuoteData;
 import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiQuoteResponse;

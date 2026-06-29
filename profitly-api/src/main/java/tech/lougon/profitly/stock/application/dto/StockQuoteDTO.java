@@ -1,4 +1,4 @@
-package tech.lougon.profitly.stock.service.dto;
+package tech.lougon.profitly.stock.application.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
