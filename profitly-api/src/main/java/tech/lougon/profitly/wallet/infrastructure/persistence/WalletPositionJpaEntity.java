@@ -5,8 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "wallet_positions")
@@ -27,11 +28,8 @@ public class WalletPositionJpaEntity {
     @Column(name = "ticker", nullable = false)
     private String ticker;
 
-    @Column(name = "quantity", nullable = false)
-    private Integer quantity;
-
-    @Column(name = "average_price", precision = 19, scale = 4, nullable = false)
-    private BigDecimal averagePrice;
+    @OneToMany(mappedBy = "walletPosition", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    private List<PositionEntryJpaEntity> entries = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
