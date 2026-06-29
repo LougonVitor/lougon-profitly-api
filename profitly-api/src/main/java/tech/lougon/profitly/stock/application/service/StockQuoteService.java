@@ -44,6 +44,20 @@ public class StockQuoteService {
                 .map(stockMapper::toDTO);
     }
 
+    public List<StockQuoteDTO> syncManyFromBrapi(List<String> tickers) {
+        if (tickers.isEmpty()) return List.of();
+
+        BrapiQuoteResponse response = brapiStockClient.fetchQuotes(tickers);
+
+        return response.results().stream()
+                .map(result -> {
+                    StockQuote stockQuote = stockMapper.toDomain(result, response);
+                    StockQuote saved = stockRepository.save(stockQuote);
+                    return stockMapper.toDTO(saved);
+                })
+                .toList();
+    }
+
     public List<StockQuoteDTO> findAll() {
         return stockRepository.findAll()
                 .stream()
