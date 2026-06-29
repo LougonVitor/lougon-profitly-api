@@ -1,4 +1,4 @@
-package tech.lougon.profitly_api;
+package tech.lougon.profitly;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
