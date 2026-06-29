@@ -6,6 +6,7 @@ import java.util.List;
 public record Wallet(
         String id,
         String name,
+        String userId,
         List<WalletPosition> positions,
         Instant createdAt
 ) {}
