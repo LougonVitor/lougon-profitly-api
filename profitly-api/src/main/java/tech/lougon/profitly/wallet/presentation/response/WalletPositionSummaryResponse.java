@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 public record WalletPositionSummaryResponse(
         String id,
         String ticker,
+        String logoUrl,
         Integer quantity,
         BigDecimal averagePrice,
         BigDecimal currentPrice,
@@ -19,6 +20,7 @@ public record WalletPositionSummaryResponse(
         return new WalletPositionSummaryResponse(
                 dto.id(),
                 dto.ticker(),
+                dto.logoUrl(),
                 dto.quantity(),
                 dto.averagePrice(),
                 dto.currentPrice(),
