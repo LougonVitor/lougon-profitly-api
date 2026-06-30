@@ -18,8 +18,8 @@ public class TickerSyncScheduler {
         this.tickerService = tickerService;
     }
 
-    @Async
-    @EventListener(ApplicationReadyEvent.class)
+    //@Async
+    //@EventListener(ApplicationReadyEvent.class)
     public void syncOnStartup() {
         log.info("Starting ticker sync from /api/v2/tickers");
         tickerService.syncAll();
