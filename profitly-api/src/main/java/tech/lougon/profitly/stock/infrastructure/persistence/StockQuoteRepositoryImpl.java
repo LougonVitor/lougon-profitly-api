@@ -71,6 +71,7 @@ public class StockQuoteRepositoryImpl implements StockRepository {
         existing.setFiftyTwoWeekLow(stockQuote.getData().fiftyTwoWeekLow());
         existing.setFiftyTwoWeekHigh(stockQuote.getData().fiftyTwoWeekHigh());
         existing.setLogoUrl(stockQuote.getData().logoUrl());
+        if (stockQuote.getAssetType() != null) existing.setAssetType(stockQuote.getAssetType());
         return existing;
     }
 }
