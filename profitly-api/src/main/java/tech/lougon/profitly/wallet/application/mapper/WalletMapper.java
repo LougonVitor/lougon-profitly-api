@@ -52,6 +52,7 @@ public class WalletMapper {
     private WalletPositionSummaryDTO toPositionSummaryDTO(WalletPosition position, StockMarketData marketData) {
         BigDecimal currentPrice = marketData != null ? marketData.currentPrice() : BigDecimal.ZERO;
         String logoUrl = marketData != null ? marketData.logoUrl() : null;
+        String assetType = marketData != null ? marketData.assetType() : null;
 
         BigDecimal averagePrice = position.averagePrice();
         BigDecimal qty = BigDecimal.valueOf(position.totalQuantity());
@@ -73,6 +74,7 @@ public class WalletMapper {
                 position.id(),
                 position.ticker(),
                 logoUrl,
+                assetType,
                 position.totalQuantity(),
                 averagePrice,
                 currentPrice,
