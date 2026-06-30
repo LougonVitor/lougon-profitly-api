@@ -1,7 +1,7 @@
 package tech.lougon.profitly.wallet.infrastructure.stock;
 
 import org.springframework.stereotype.Component;
-import tech.lougon.profitly.stock.domain.repository.StockRepository;
+import tech.lougon.profitly.ticker.domain.repository.TickerRepository;
 import tech.lougon.profitly.wallet.domain.port.StockMarketData;
 import tech.lougon.profitly.wallet.domain.port.StockPriceLookup;
 
@@ -10,19 +10,15 @@ import java.util.Optional;
 @Component
 public class StockPriceLookupImpl implements StockPriceLookup {
 
-    private final StockRepository stockRepository;
+    private final TickerRepository tickerRepository;
 
-    public StockPriceLookupImpl(StockRepository stockRepository) {
-        this.stockRepository = stockRepository;
+    public StockPriceLookupImpl(TickerRepository tickerRepository) {
+        this.tickerRepository = tickerRepository;
     }
 
     @Override
-    public Optional<StockMarketData> findMarketData(String ticker) {
-        return stockRepository.findByTicker(ticker)
-                .map(quote -> new StockMarketData(
-                        quote.getData().regularMarketPrice(),
-                        quote.getData().logoUrl(),
-                        quote.getAssetType()
-                ));
+    public Optional<StockMarketData> findMarketData(String symbol) {
+        return tickerRepository.findBySymbol(symbol)
+                .map(t -> new StockMarketData(t.lastPrice(), t.logoUrl(), t.subType()));
     }
 }
