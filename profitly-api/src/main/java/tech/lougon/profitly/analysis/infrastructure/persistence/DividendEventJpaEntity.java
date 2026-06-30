@@ -1,11 +1,15 @@
 package tech.lougon.profitly.analysis.infrastructure.persistence;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.SequenceGenerator;
+import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "dividend_events", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"symbol", "asset_issued", "last_date_prior", "label"})
-})
+@Table(name = "dividend_events")
 public class DividendEventJpaEntity {
 
     @Id
