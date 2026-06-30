@@ -4,6 +4,7 @@ import tech.lougon.profitly.analysis.domain.model.DividendEvent;
 import tech.lougon.profitly.ticker.application.dto.TickerDTO;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 
@@ -48,12 +49,21 @@ public record TickerAnalysisDTO(
     public static TickerAnalysisDTO of(TickerDTO ticker,
                                        tech.lougon.profitly.analysis.domain.model.TickerAnalysis stats,
                                        List<DividendEvent> dividends) {
+        BigDecimal eps = stats.earningsPerShare();
+        BigDecimal price = ticker.lastPrice();
+
+        // P/L: use API value when present; otherwise compute price / EPS
+        BigDecimal trailingPE = stats.trailingPE();
+        if (trailingPE == null && eps != null && eps.compareTo(BigDecimal.ZERO) != 0 && price != null) {
+            trailingPE = price.divide(eps, 2, RoundingMode.HALF_UP);
+        }
+
         return new TickerAnalysisDTO(
                 ticker.symbol(), ticker.name(), ticker.longName(),
                 ticker.assetType(), ticker.subType(), ticker.sector(), ticker.logoUrl(),
-                ticker.lastPrice(), ticker.changePercent(), ticker.volume(), ticker.marketCap(),
-                stats.trailingPE(), stats.priceToBook(), stats.dividendYield(),
-                stats.beta(), stats.earningsPerShare(), stats.forwardPE(), stats.pegRatio(),
+                price, ticker.changePercent(), ticker.volume(), ticker.marketCap(),
+                trailingPE, stats.priceToBook(), stats.dividendYield(),
+                stats.beta(), eps, stats.forwardPE(), stats.pegRatio(),
                 stats.enterpriseToRevenue(), stats.enterpriseToEbitda(),
                 stats.enterpriseValue(),
                 stats.bookValue(), stats.weekChange52(), stats.profitMargins(),

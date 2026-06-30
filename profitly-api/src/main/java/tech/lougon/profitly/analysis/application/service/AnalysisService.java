@@ -189,13 +189,6 @@ public class AnalysisService {
                 ? s.profitMargins()
                 : (f != null ? f.profitMargins() : null);
 
-        // P/L: compute from currentPrice / earningsPerShare when API doesn't supply it
-        if (trailingPE == null && earningsPerShare != null
-                && earningsPerShare.compareTo(BigDecimal.ZERO) != 0
-                && f != null && f.currentPrice() != null) {
-            trailingPE = f.currentPrice().divide(earningsPerShare, 2, RoundingMode.HALF_UP);
-        }
-
         // EV/EBITDA: compute when API doesn't supply it
         if (enterpriseToEbitda == null && enterpriseValue != null
                 && f != null && f.ebitda() != null && f.ebitda() != 0) {
