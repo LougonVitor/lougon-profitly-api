@@ -27,13 +27,12 @@ public class WalletRepositoryImpl implements WalletRepository {
 
     @Override
     public Optional<Wallet> findById(String id) {
-        return jpaWalletRepository.findById(id)
-                .map(walletMapper::toDomain);
+        return jpaWalletRepository.findById(id).map(walletMapper::toDomain);
     }
 
     @Override
-    public List<Wallet> findAll() {
-        return jpaWalletRepository.findAll().stream()
+    public List<Wallet> findByUserId(String userId) {
+        return jpaWalletRepository.findByUserId(userId).stream()
                 .map(walletMapper::toDomain)
                 .toList();
     }
