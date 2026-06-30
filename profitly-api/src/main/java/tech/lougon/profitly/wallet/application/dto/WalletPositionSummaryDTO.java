@@ -7,6 +7,7 @@ public record WalletPositionSummaryDTO(
         String id,
         String ticker,
         String logoUrl,
+        String assetType,
         Integer quantity,
         BigDecimal averagePrice,
         BigDecimal currentPrice,
