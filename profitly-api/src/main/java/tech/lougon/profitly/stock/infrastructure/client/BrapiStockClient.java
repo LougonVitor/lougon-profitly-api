@@ -25,13 +25,6 @@ public class BrapiStockClient {
                 .block();
     }
 
-    public BrapiQuoteResponse fetchFiiQuote(String ticker) {
-        return webClient.get().uri("/api/v2/fii/quote?symbols={ticker}", ticker)
-                .retrieve()
-                .bodyToMono(BrapiQuoteResponse.class)
-                .block();
-    }
-
     public BrapiQuoteResponse fetchQuotes(List<String> tickers) {
         String symbols = String.join(",", tickers);
 
@@ -48,8 +41,8 @@ public class BrapiStockClient {
                 .block();
     }
 
-    public List<String> fetchAllFiiSymbols() {
-        List<String> symbols = new ArrayList<>();
+    public List<BrapiFiiListResponse.BrapiFii> fetchAllFiis() {
+        List<BrapiFiiListResponse.BrapiFii> fiis = new ArrayList<>();
         int page = 1;
         boolean hasNext = true;
 
@@ -63,11 +56,11 @@ public class BrapiStockClient {
 
             if (response == null || response.fiis() == null) break;
 
-            response.fiis().forEach(f -> symbols.add(f.symbol()));
+            fiis.addAll(response.fiis());
             hasNext = response.pagination() != null && response.pagination().hasNextPage();
             page++;
         }
 
-        return symbols;
+        return fiis;
     }
 }
