@@ -1,9 +1,13 @@
 package tech.lougon.profitly.wallet.presentation.controller;
 
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import tech.lougon.profitly.wallet.application.service.WalletService;
 import tech.lougon.profitly.wallet.presentation.request.AddEntryRequest;
+import tech.lougon.profitly.wallet.presentation.request.CreateWalletRequest;
 import tech.lougon.profitly.wallet.presentation.request.UpdateEntryRequest;
 import tech.lougon.profitly.wallet.presentation.response.WalletSummaryResponse;
 
@@ -21,8 +25,9 @@ public class WalletController {
     }
 
     @GetMapping
-    public ResponseEntity<List<WalletSummaryResponse>> findAll() {
-        List<WalletSummaryResponse> response = walletService.findAll().stream()
+    public ResponseEntity<List<WalletSummaryResponse>> findAll(Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        List<WalletSummaryResponse> response = walletService.findAll(userId).stream()
                 .map(WalletSummaryResponse::from)
                 .toList();
         return ResponseEntity.ok(response);
@@ -31,6 +36,16 @@ public class WalletController {
     @GetMapping("/{id}")
     public ResponseEntity<WalletSummaryResponse> findById(@PathVariable String id) {
         return ResponseEntity.ok(WalletSummaryResponse.from(walletService.findById(id)));
+    }
+
+    @PostMapping
+    public ResponseEntity<WalletSummaryResponse> create(
+            @RequestBody @Valid CreateWalletRequest request,
+            Authentication auth
+    ) {
+        String userId = (String) auth.getPrincipal();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(WalletSummaryResponse.from(walletService.create(request.name(), userId)));
     }
 
     @PostMapping("/{walletId}/positions/{ticker}/entries")
