@@ -83,6 +83,9 @@ public class StockQuoteJpaEntity {
     @Column(name = "logo_url")
     private String logoUrl;
 
+    @Column(name = "asset_type", length = 20)
+    private String assetType;
+
     @Column(name = "requested_at")
     private Instant requestedAt;
 
