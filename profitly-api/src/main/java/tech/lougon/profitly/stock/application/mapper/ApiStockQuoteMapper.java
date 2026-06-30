@@ -65,6 +65,7 @@ public class ApiStockQuoteMapper {
                 result.requestedSymbol(),
                 result.symbol(),
                 result.changed(),
+                null,
                 data,
                 response.requestedAt(),
                 response.took()
