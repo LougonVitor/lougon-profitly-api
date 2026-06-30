@@ -8,5 +8,5 @@ import java.util.Optional;
 public interface WalletRepository {
     Wallet save(Wallet wallet);
     Optional<Wallet> findById(String id);
-    List<Wallet> findAll();
+    List<Wallet> findByUserId(String userId);
 }
