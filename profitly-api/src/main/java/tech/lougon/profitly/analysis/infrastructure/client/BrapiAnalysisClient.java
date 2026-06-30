@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiDividendsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFinancialDataResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiHistoricalResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStatisticsResponse;
 
@@ -39,6 +40,27 @@ public class BrapiAnalysisClient {
             return Optional.ofNullable(response.results().get(0).data());
         } catch (Exception e) {
             log.warn("Failed to fetch statistics for {}: {}", symbol, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    public Optional<BrapiFinancialDataResponse.Data> fetchFinancialData(String symbol) {
+        try {
+            BrapiFinancialDataResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/financial-data")
+                            .queryParam("symbols", symbol)
+                            .queryParam("mode", "current")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFinancialDataResponse.class)
+                    .block();
+
+            if (response == null || response.results() == null || response.results().isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(response.results().get(0).data());
+        } catch (Exception e) {
+            log.warn("Failed to fetch financial-data for {}: {}", symbol, e.getMessage());
             return Optional.empty();
         }
     }
@@ -85,6 +107,28 @@ public class BrapiAnalysisClient {
             return data.cashDividends();
         } catch (Exception e) {
             log.warn("Failed to fetch dividends for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<BrapiDividendsResponse.CashDividend> fetchFiiDividends(String symbol) {
+        try {
+            BrapiDividendsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/fii/dividends")
+                            .queryParam("symbols", symbol)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiDividendsResponse.class)
+                    .block();
+
+            if (response == null || response.results() == null || response.results().isEmpty()) {
+                return List.of();
+            }
+            var data = response.results().get(0).data();
+            if (data == null || data.cashDividends() == null) return List.of();
+            return data.cashDividends();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII dividends for {}: {}", symbol, e.getMessage());
             return List.of();
         }
     }
