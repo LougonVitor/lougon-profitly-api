@@ -12,7 +12,9 @@ import tech.lougon.profitly.analysis.domain.repository.DividendRepository;
 import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
 import tech.lougon.profitly.analysis.domain.repository.TickerAnalysisRepository;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFinancialDataResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStatisticsResponse;
+import tech.lougon.profitly.ticker.application.dto.TickerDTO;
 import tech.lougon.profitly.ticker.application.service.TickerService;
 
 import java.math.BigDecimal;
@@ -51,7 +53,7 @@ public class AnalysisService {
                 .orElseThrow(() -> new IllegalArgumentException("Ticker not found: " + symbol));
 
         TickerAnalysis stats = resolveStats(symbol);
-        List<DividendEvent> dividends = resolveDividends(symbol, stats);
+        List<DividendEvent> dividends = resolveDividends(symbol, ticker, stats);
 
         return TickerAnalysisDTO.of(ticker, stats, dividends);
     }
@@ -65,8 +67,7 @@ public class AnalysisService {
 
         if (needsFetch) {
             log.info("Fetching price history for {} range={}", symbol, range);
-            String brapiRange = toBrapiRange(range);
-            var bars = brapiClient.fetchHistory(symbol, brapiRange);
+            var bars = brapiClient.fetchHistory(symbol, "max");
             if (!bars.isEmpty()) {
                 List<PricePoint> points = bars.stream()
                         .filter(b -> b.date() != null && b.close() != null)
@@ -92,23 +93,39 @@ public class AnalysisService {
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private TickerAnalysis resolveStats(String symbol) {
-        return analysisRepository.findBySymbol(symbol)
-                .filter(a -> !isStale(a.syncedAt(), STATS_TTL))
-                .orElseGet(() -> {
-                    log.info("Fetching statistics for {}", symbol);
-                    return brapiClient.fetchStatistics(symbol)
-                            .map(data -> buildAndSave(symbol, data))
-                            .orElseGet(() -> buildEmpty(symbol));
-                });
+        Optional<TickerAnalysis> cached = analysisRepository.findBySymbol(symbol);
+
+        // Only use cache if fresh AND has some meaningful data
+        if (cached.isPresent() && !isStale(cached.get().syncedAt(), STATS_TTL) && hasData(cached.get())) {
+            return cached.get();
+        }
+
+        log.info("Fetching statistics for {}", symbol);
+        var statsData    = brapiClient.fetchStatistics(symbol);
+        var financialData = brapiClient.fetchFinancialData(symbol);
+
+        return buildAndSave(symbol, statsData.orElse(null), financialData.orElse(null));
     }
 
-    private List<DividendEvent> resolveDividends(String symbol, TickerAnalysis stats) {
+    private boolean hasData(TickerAnalysis a) {
+        return a.trailingPE() != null || a.priceToBook() != null || a.beta() != null
+                || a.dividendYield() != null || a.earningsPerShare() != null
+                || a.profitMargins() != null;
+    }
+
+    private List<DividendEvent> resolveDividends(String symbol, TickerDTO ticker, TickerAnalysis stats) {
         boolean dividendsStale = stats.dividendsSyncedAt() == null
                 || isStale(stats.dividendsSyncedAt(), DIVIDENDS_TTL);
 
         if (dividendsStale) {
             log.info("Fetching dividends for {}", symbol);
-            var raw = brapiClient.fetchDividends(symbol);
+            boolean isFii = "FII".equalsIgnoreCase(ticker.assetType())
+                    || "FII".equalsIgnoreCase(ticker.subType());
+
+            var raw = isFii
+                    ? brapiClient.fetchFiiDividends(symbol)
+                    : brapiClient.fetchDividends(symbol);
+
             List<DividendEvent> events = raw.stream()
                     .map(d -> new DividendEvent(
                             symbol, d.assetIssued(), d.paymentDate(), d.rate(),
@@ -140,40 +157,43 @@ public class AnalysisService {
         return dividendRepository.findBySymbol(symbol);
     }
 
-    private TickerAnalysis buildAndSave(String symbol, BrapiStatisticsResponse.Data data) {
-        TickerAnalysis analysis = new TickerAnalysis(
-                symbol,
-                data.trailingPE(),
-                data.priceToBook(),
-                data.dividendYield(),
-                data.beta(),
-                data.earningsPerShare() != null ? data.earningsPerShare() : data.trailingEps(),
-                data.forwardPE(),
-                data.pegRatio(),
-                data.enterpriseToRevenue(),
-                data.enterpriseToEbitda(),
-                data.marketCap(),
-                data.enterpriseValue(),
-                data.bookValue(),
-                data.weekChange52(),
-                data.profitMargins(),
-                data.sharesOutstanding(),
-                data.floatShares(),
-                data.lastDividendValue(),
-                data.lastDividendDate(),
-                Instant.now(),
-                null
-        );
-        return analysisRepository.save(analysis);
-    }
+    private TickerAnalysis buildAndSave(String symbol,
+                                        BrapiStatisticsResponse.Data s,
+                                        BrapiFinancialDataResponse.Data f) {
+        // Statistics fields — prefer stats; fallback to financial-data where available
+        BigDecimal trailingPE           = s != null ? s.trailingPE() : null;
+        BigDecimal priceToBook          = s != null ? s.priceToBook() : null;
+        BigDecimal dividendYield        = s != null ? s.dividendYield() : null;
+        BigDecimal beta                 = s != null ? s.beta() : null;
+        BigDecimal earningsPerShare     = s != null
+                ? (s.earningsPerShare() != null ? s.earningsPerShare() : s.trailingEps())
+                : null;
+        BigDecimal forwardPE            = s != null ? s.forwardPE() : null;
+        BigDecimal pegRatio             = s != null ? s.pegRatio() : null;
+        BigDecimal enterpriseToRevenue  = s != null ? s.enterpriseToRevenue() : null;
+        BigDecimal enterpriseToEbitda   = s != null ? s.enterpriseToEbitda() : null;
+        Long marketCap                  = s != null ? s.marketCap() : null;
+        Long enterpriseValue            = s != null ? s.enterpriseValue() : null;
+        BigDecimal bookValue            = s != null ? s.bookValue() : null;
+        BigDecimal weekChange52         = s != null ? s.weekChange52() : null;
+        Long sharesOutstanding          = s != null ? s.sharesOutstanding() : null;
+        Long floatShares                = s != null ? s.floatShares() : null;
+        BigDecimal lastDividendValue    = s != null ? s.lastDividendValue() : null;
+        String lastDividendDate         = s != null ? s.lastDividendDate() : null;
 
-    private TickerAnalysis buildEmpty(String symbol) {
-        TickerAnalysis empty = new TickerAnalysis(
-                symbol, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null,
+        // Profit margins: prefer stats, fallback to financial-data
+        BigDecimal profitMargins = s != null && s.profitMargins() != null
+                ? s.profitMargins()
+                : (f != null ? f.profitMargins() : null);
+
+        TickerAnalysis analysis = new TickerAnalysis(
+                symbol, trailingPE, priceToBook, dividendYield, beta, earningsPerShare,
+                forwardPE, pegRatio, enterpriseToRevenue, enterpriseToEbitda,
+                marketCap, enterpriseValue, bookValue, weekChange52, profitMargins,
+                sharesOutstanding, floatShares, lastDividendValue, lastDividendDate,
                 Instant.now(), null
         );
-        return analysisRepository.save(empty);
+        return analysisRepository.save(analysis);
     }
 
     private boolean isStale(Instant syncedAt, Duration ttl) {
@@ -192,20 +212,6 @@ public class AnalysisService {
             case "10y" -> today.minusYears(10);
             case "max" -> LocalDate.of(2000, 1, 1);
             default    -> today.minusYears(1);
-        };
-    }
-
-    private String toBrapiRange(String range) {
-        return switch (range) {
-            case "1m"  -> "1mo";
-            case "3m"  -> "3mo";
-            case "6m"  -> "6mo";
-            case "1y"  -> "1y";
-            case "2y"  -> "2y";
-            case "5y"  -> "5y";
-            case "10y" -> "10y";
-            case "max" -> "max";
-            default    -> "5y";
         };
     }
 }
