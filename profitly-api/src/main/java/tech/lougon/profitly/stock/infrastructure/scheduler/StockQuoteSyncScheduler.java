@@ -2,6 +2,9 @@ package tech.lougon.profitly.stock.infrastructure.scheduler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.stock.application.service.StockQuoteService;
@@ -22,12 +25,23 @@ public class StockQuoteSyncScheduler {
         this.brapiStockClient = brapiStockClient;
     }
 
+    @Async
+    @EventListener(ApplicationReadyEvent.class)
+    public void syncOnStartup() {
+        log.info("Application ready — starting initial FII sync");
+        syncFiis();
+    }
+
     @Scheduled(cron = "${profitly.scheduler.stock-sync-hourly-cron}")
     public void syncEveryHour() {
         List<String> stockTickers = fetchStockTickers();
         log.info("Starting hourly sync — {} stocks", stockTickers.size());
         sync(stockTickers, "stock");
 
+        syncFiis();
+    }
+
+    private void syncFiis() {
         List<String> fiiTickers = brapiStockClient.fetchAllFiiSymbols();
         log.info("Syncing {} FIIs", fiiTickers.size());
         sync(fiiTickers, "fii");
