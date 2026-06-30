@@ -12,6 +12,7 @@ public class StockQuote {
     public String requestedSymbol;
     public final String symbol;
     public final Boolean changed;
+    public String assetType;
 
     public final StockQuoteData data;
 
