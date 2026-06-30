@@ -29,14 +29,16 @@ public class InfraStockQuoteMapper {
                 entity.getLogoUrl()
         );
 
-        return new StockQuote(
+        StockQuote quote = new StockQuote(
                 entity.getRequestedSymbol(),
                 entity.getSymbol(),
                 entity.getChanged(),
+                entity.getAssetType(),
                 data,
                 entity.getRequestedAt(),
                 entity.getTook()
         );
+        return quote;
     }
 
     public StockQuoteJpaEntity toEntity(StockQuote stockQuote) {
@@ -64,6 +66,7 @@ public class InfraStockQuoteMapper {
         entity.setFiftyTwoWeekLow(stockQuote.getData().fiftyTwoWeekLow());
         entity.setFiftyTwoWeekHigh(stockQuote.getData().fiftyTwoWeekHigh());
         entity.setLogoUrl(stockQuote.getData().logoUrl());
+        entity.setAssetType(stockQuote.getAssetType());
         return entity;
     }
 }
