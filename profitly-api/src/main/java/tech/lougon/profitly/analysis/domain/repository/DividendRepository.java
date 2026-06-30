@@ -8,4 +8,5 @@ public interface DividendRepository {
     List<DividendEvent> findBySymbol(String symbol);
     void saveAll(List<DividendEvent> events);
     void deleteBySymbol(String symbol);
+    void replaceAll(String symbol, List<DividendEvent> events);
 }

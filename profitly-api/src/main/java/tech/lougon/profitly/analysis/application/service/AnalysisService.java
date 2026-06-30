@@ -117,22 +117,24 @@ public class AnalysisService {
                     ))
                     .toList();
 
-            dividendRepository.deleteBySymbol(symbol);
-            if (!events.isEmpty()) dividendRepository.saveAll(events);
+            try {
+                dividendRepository.replaceAll(symbol, events);
 
-            // Update dividends sync timestamp
-            TickerAnalysis updated = new TickerAnalysis(
-                    stats.symbol(), stats.trailingPE(), stats.priceToBook(),
-                    stats.dividendYield(), stats.beta(), stats.earningsPerShare(),
-                    stats.forwardPE(), stats.pegRatio(), stats.enterpriseToRevenue(),
-                    stats.enterpriseToEbitda(), stats.marketCap(), stats.enterpriseValue(),
-                    stats.bookValue(), stats.weekChange52(), stats.profitMargins(),
-                    stats.sharesOutstanding(), stats.floatShares(),
-                    stats.lastDividendValue(), stats.lastDividendDate(),
-                    stats.syncedAt(), Instant.now()
-            );
-            analysisRepository.save(updated);
-            return events;
+                TickerAnalysis updated = new TickerAnalysis(
+                        stats.symbol(), stats.trailingPE(), stats.priceToBook(),
+                        stats.dividendYield(), stats.beta(), stats.earningsPerShare(),
+                        stats.forwardPE(), stats.pegRatio(), stats.enterpriseToRevenue(),
+                        stats.enterpriseToEbitda(), stats.marketCap(), stats.enterpriseValue(),
+                        stats.bookValue(), stats.weekChange52(), stats.profitMargins(),
+                        stats.sharesOutstanding(), stats.floatShares(),
+                        stats.lastDividendValue(), stats.lastDividendDate(),
+                        stats.syncedAt(), Instant.now()
+                );
+                analysisRepository.save(updated);
+                return events;
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                log.warn("Concurrent dividend refresh for {} — reading from DB", symbol);
+            }
         }
 
         return dividendRepository.findBySymbol(symbol);

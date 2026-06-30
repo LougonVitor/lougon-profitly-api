@@ -36,4 +36,14 @@ public class DividendRepositoryImpl implements DividendRepository {
     public void deleteBySymbol(String symbol) {
         jpa.deleteBySymbol(symbol);
     }
+
+    @Override
+    @Transactional
+    public void replaceAll(String symbol, List<DividendEvent> events) {
+        jpa.deleteBySymbol(symbol);
+        jpa.flush();
+        if (!events.isEmpty()) {
+            jpa.saveAll(events.stream().map(mapper::toEntity).toList());
+        }
+    }
 }
