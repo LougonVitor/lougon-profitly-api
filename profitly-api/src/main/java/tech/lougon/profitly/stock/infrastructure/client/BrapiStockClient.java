@@ -25,6 +25,13 @@ public class BrapiStockClient {
                 .block();
     }
 
+    public BrapiQuoteResponse fetchFiiQuote(String ticker) {
+        return webClient.get().uri("/api/v2/fii/quote?symbols={ticker}", ticker)
+                .retrieve()
+                .bodyToMono(BrapiQuoteResponse.class)
+                .block();
+    }
+
     public BrapiQuoteResponse fetchQuotes(List<String> tickers) {
         String symbols = String.join(",", tickers);
 
