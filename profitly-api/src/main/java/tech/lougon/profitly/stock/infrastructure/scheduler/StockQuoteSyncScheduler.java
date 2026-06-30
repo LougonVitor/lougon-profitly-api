@@ -24,32 +24,31 @@ public class StockQuoteSyncScheduler {
 
     @Scheduled(cron = "${profitly.scheduler.stock-sync-hourly-cron}")
     public void syncStocksEveryHour() {
-        List<String> tickers = fetchAllStockTickers();
-        log.info("Starting hourly stock sync for {} tickers", tickers.size());
+        List<BrapiTickerListResponse.BrapiTicker> tickers = fetchAllTickers();
+        log.info("Starting hourly sync for {} tickers (stocks + FIIs)", tickers.size());
         sync(tickers);
     }
 
-    private List<String> fetchAllStockTickers() {
+    private List<BrapiTickerListResponse.BrapiTicker> fetchAllTickers() {
         return brapiStockClient.fetchTickerList().stocks().stream()
-                .filter(t -> "stock".equalsIgnoreCase(t.type()))
-                .map(BrapiTickerListResponse.BrapiTicker::stock)
+                .filter(t -> "stock".equalsIgnoreCase(t.type()) || "fii".equalsIgnoreCase(t.type()))
                 .toList();
     }
 
-    private void sync(List<String> tickers) {
+    private void sync(List<BrapiTickerListResponse.BrapiTicker> tickers) {
         int success = 0;
         int failure = 0;
 
-        for (String ticker : tickers) {
+        for (BrapiTickerListResponse.BrapiTicker ticker : tickers) {
             try {
-                stockService.syncFromBrapi(ticker);
+                stockService.syncFromBrapi(ticker.stock(), ticker.type().toLowerCase());
                 success++;
             } catch (Exception e) {
-                log.warn("Failed to sync {}: {}", ticker, e.getMessage());
+                log.warn("Failed to sync {}: {}", ticker.stock(), e.getMessage());
                 failure++;
             }
         }
 
-        log.info("Stock sync finished — success: {}, failure: {}", success, failure);
+        log.info("Sync finished — success: {}, failure: {}", success, failure);
     }
 }
