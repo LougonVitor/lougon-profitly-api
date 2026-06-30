@@ -53,6 +53,14 @@ public class WalletService {
         return walletMapper.toSummaryDTO(saved, Map.of());
     }
 
+    public WalletSummaryDTO rename(String walletId, String name) {
+        Wallet wallet = walletRepository.findById(walletId)
+                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+        Wallet renamed = new Wallet(wallet.id(), name, wallet.userId(), wallet.positions(), wallet.createdAt());
+        Wallet saved = walletRepository.save(renamed);
+        return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
+    }
+
     public void deleteWallet(String walletId) {
         walletRepository.deleteById(walletId);
     }
