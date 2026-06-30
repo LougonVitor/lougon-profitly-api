@@ -4,10 +4,13 @@ import org.springframework.stereotype.Service;
 import tech.lougon.profitly.stock.application.dto.StockQuoteDTO;
 import tech.lougon.profitly.stock.application.mapper.ApiStockQuoteMapper;
 import tech.lougon.profitly.stock.domain.model.StockQuote;
+import tech.lougon.profitly.stock.domain.model.StockQuoteData;
 import tech.lougon.profitly.stock.domain.repository.StockRepository;
 import tech.lougon.profitly.stock.infrastructure.client.BrapiStockClient;
+import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiFiiListResponse;
 import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiQuoteResponse;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,16 +43,17 @@ public class StockQuoteService {
         return stockMapper.toDTO(saved);
     }
 
-    public StockQuoteDTO syncFiiFromBrapi(String ticker) {
-        BrapiQuoteResponse response = brapiStockClient.fetchFiiQuote(ticker);
+    public void syncFiiFromList(BrapiFiiListResponse.BrapiFii fii) {
+        StockQuoteData data = new StockQuoteData(
+                fii.name(), fii.name(), null,
+                fii.price(), null, null, null,
+                null, null, null,
+                null, null, null, null,
+                null, null, null, null
+        );
 
-        BrapiQuoteResponse.BrapiQuoteResult result = response.results().getFirst();
-
-        StockQuote stockQuote = stockMapper.toDomain(result, response);
-        stockQuote.setAssetType("fii");
-        StockQuote saved = stockRepository.save(stockQuote);
-
-        return stockMapper.toDTO(saved);
+        StockQuote stockQuote = new StockQuote(fii.symbol(), fii.symbol(), null, "fii", data, Instant.now(), null);
+        stockRepository.save(stockQuote);
     }
 
     public Optional<StockQuoteDTO> findByTicker(String ticker) {
