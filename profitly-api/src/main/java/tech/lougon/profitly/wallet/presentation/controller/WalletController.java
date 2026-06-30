@@ -48,6 +48,14 @@ public class WalletController {
                 .body(WalletSummaryResponse.from(walletService.create(request.name(), userId)));
     }
 
+    @PatchMapping("/{walletId}/name")
+    public ResponseEntity<WalletSummaryResponse> rename(
+            @PathVariable String walletId,
+            @RequestBody java.util.Map<String, String> body
+    ) {
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.rename(walletId, body.get("name"))));
+    }
+
     @DeleteMapping("/{walletId}")
     public ResponseEntity<Void> deleteWallet(@PathVariable String walletId) {
         walletService.deleteWallet(walletId);
