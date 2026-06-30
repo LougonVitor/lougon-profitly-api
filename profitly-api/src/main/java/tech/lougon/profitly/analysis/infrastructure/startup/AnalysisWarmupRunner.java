@@ -7,7 +7,6 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.application.service.AnalysisService;
-import tech.lougon.profitly.ticker.application.service.TickerService;
 
 @Component
 public class AnalysisWarmupRunner implements ApplicationRunner {
@@ -15,11 +14,9 @@ public class AnalysisWarmupRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(AnalysisWarmupRunner.class);
     private static final long DELAY_MS = 500;
 
-    private final TickerService tickerService;
     private final AnalysisService analysisService;
 
-    public AnalysisWarmupRunner(TickerService tickerService, AnalysisService analysisService) {
-        this.tickerService = tickerService;
+    public AnalysisWarmupRunner(AnalysisService analysisService) {
         this.analysisService = analysisService;
     }
 
@@ -28,22 +25,24 @@ public class AnalysisWarmupRunner implements ApplicationRunner {
         warmupAsync();
     }
 
+    // TODO: expand to tickerService.findAll() once BBAS3 is fully validated
+    private static final java.util.List<String> PILOT_SYMBOLS = java.util.List.of("BBAS3");
+
     @Async
     public void warmupAsync() {
-        var tickers = tickerService.findAll();
-        log.info("Starting analysis warmup for {} tickers", tickers.size());
+        log.info("Starting analysis warmup for {} tickers", PILOT_SYMBOLS.size());
 
         int success = 0, failed = 0;
-        for (var ticker : tickers) {
+        for (String symbol : PILOT_SYMBOLS) {
             try {
-                analysisService.getAnalysis(ticker.symbol());
+                analysisService.getAnalysis(symbol);
                 success++;
                 Thread.sleep(DELAY_MS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                log.warn("Warmup failed for {}: {}", ticker.symbol(), e.getMessage());
+                log.warn("Warmup failed for {}: {}", symbol, e.getMessage());
                 failed++;
             }
         }
