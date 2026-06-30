@@ -38,13 +38,20 @@ public class StockQuoteSyncScheduler {
     }
 
     private void syncFiis() {
-        List<BrapiFiiListResponse.BrapiFii> fiis = brapiStockClient.fetchAllFiis();
-        log.info("Syncing {} FIIs from list", fiis.size());
+        List<BrapiFiiListResponse.BrapiFii> fiis = brapiStockClient.fetchAllFiis().stream()
+                .filter(f -> f.symbol() != null && !f.symbol().isBlank())
+                .toList();
+        log.info("Syncing {} FIIs from list (skipped nulls)", fiis.size());
 
         int success = 0;
+        int skipped = 0;
         int failure = 0;
 
         for (BrapiFiiListResponse.BrapiFii fii : fiis) {
+            if (fii.price() == null) {
+                skipped++;
+                continue;
+            }
             try {
                 stockService.syncFiiFromList(fii);
                 success++;
@@ -54,6 +61,6 @@ public class StockQuoteSyncScheduler {
             }
         }
 
-        log.info("FII sync finished — success: {}, failure: {}", success, failure);
+        log.info("FII sync finished — success: {}, skipped (no price): {}, failure: {}", success, skipped, failure);
     }
 }
