@@ -28,7 +28,7 @@ public record TickerAnalysisResponse(
         BigDecimal pegRatio,
         BigDecimal enterpriseToRevenue,
         BigDecimal enterpriseToEbitda,
-        BigDecimal enterpriseValue,
+        Long enterpriseValue,
         BigDecimal bookValue,
         BigDecimal weekChange52,
         BigDecimal profitMargins,

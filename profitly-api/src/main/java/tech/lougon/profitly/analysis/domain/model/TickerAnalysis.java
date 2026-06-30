@@ -18,8 +18,8 @@ public record TickerAnalysis(
         BigDecimal enterpriseToEbitda,
 
         // Market data
-        BigDecimal marketCap,
-        BigDecimal enterpriseValue,
+        Long marketCap,
+        Long enterpriseValue,
         BigDecimal bookValue,
         BigDecimal weekChange52,
 

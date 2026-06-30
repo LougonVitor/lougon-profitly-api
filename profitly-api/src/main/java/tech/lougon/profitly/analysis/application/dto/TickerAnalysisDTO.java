@@ -31,7 +31,7 @@ public record TickerAnalysisDTO(
         BigDecimal pegRatio,
         BigDecimal enterpriseToRevenue,
         BigDecimal enterpriseToEbitda,
-        BigDecimal enterpriseValue,
+        Long enterpriseValue,
         BigDecimal bookValue,
         BigDecimal weekChange52,
         BigDecimal profitMargins,
@@ -55,7 +55,7 @@ public record TickerAnalysisDTO(
                 stats.trailingPE(), stats.priceToBook(), stats.dividendYield(),
                 stats.beta(), stats.earningsPerShare(), stats.forwardPE(), stats.pegRatio(),
                 stats.enterpriseToRevenue(), stats.enterpriseToEbitda(),
-                stats.enterpriseValue() != null ? BigDecimal.valueOf(stats.enterpriseValue()) : null,
+                stats.enterpriseValue(),
                 stats.bookValue(), stats.weekChange52(), stats.profitMargins(),
                 stats.sharesOutstanding(), stats.lastDividendValue(), stats.lastDividendDate(),
                 dividends, stats.syncedAt()
