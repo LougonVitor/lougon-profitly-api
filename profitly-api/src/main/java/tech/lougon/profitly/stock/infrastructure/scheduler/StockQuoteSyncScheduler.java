@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.stock.application.service.StockQuoteService;
 import tech.lougon.profitly.stock.infrastructure.client.BrapiStockClient;
+import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiFiiListResponse;
 
 import java.util.List;
 
@@ -37,18 +38,18 @@ public class StockQuoteSyncScheduler {
     }
 
     private void syncFiis() {
-        List<String> fiiTickers = brapiStockClient.fetchAllFiiSymbols();
-        log.info("Syncing {} FIIs", fiiTickers.size());
+        List<BrapiFiiListResponse.BrapiFii> fiis = brapiStockClient.fetchAllFiis();
+        log.info("Syncing {} FIIs from list", fiis.size());
 
         int success = 0;
         int failure = 0;
 
-        for (String ticker : fiiTickers) {
+        for (BrapiFiiListResponse.BrapiFii fii : fiis) {
             try {
-                stockService.syncFiiFromBrapi(ticker);
+                stockService.syncFiiFromList(fii);
                 success++;
             } catch (Exception e) {
-                log.warn("Failed to sync FII {}: {}", ticker, e.getMessage());
+                log.warn("Failed to sync FII {} ({}): {}", fii.symbol(), fii.name(), e.getMessage());
                 failure++;
             }
         }
