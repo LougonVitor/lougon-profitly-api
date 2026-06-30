@@ -114,8 +114,10 @@ public class AnalysisService {
     }
 
     private List<DividendEvent> resolveDividends(String symbol, TickerDTO ticker, TickerAnalysis stats) {
+        List<DividendEvent> cached = dividendRepository.findBySymbol(symbol);
         boolean dividendsStale = stats.dividendsSyncedAt() == null
-                || isStale(stats.dividendsSyncedAt(), DIVIDENDS_TTL);
+                || isStale(stats.dividendsSyncedAt(), DIVIDENDS_TTL)
+                || cached.isEmpty();
 
         if (dividendsStale) {
             log.info("Fetching dividends for {}", symbol);
@@ -154,7 +156,7 @@ public class AnalysisService {
             }
         }
 
-        return dividendRepository.findBySymbol(symbol);
+        return cached;
     }
 
     private TickerAnalysis buildAndSave(String symbol,
