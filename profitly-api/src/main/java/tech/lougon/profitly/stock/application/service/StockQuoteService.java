@@ -40,6 +40,18 @@ public class StockQuoteService {
         return stockMapper.toDTO(saved);
     }
 
+    public StockQuoteDTO syncFiiFromBrapi(String ticker) {
+        BrapiQuoteResponse response = brapiStockClient.fetchFiiQuote(ticker);
+
+        BrapiQuoteResponse.BrapiQuoteResult result = response.results().getFirst();
+
+        StockQuote stockQuote = stockMapper.toDomain(result, response);
+        stockQuote.setAssetType("fii");
+        StockQuote saved = stockRepository.save(stockQuote);
+
+        return stockMapper.toDTO(saved);
+    }
+
     public Optional<StockQuoteDTO> findByTicker(String ticker) {
         return stockRepository.findByTicker(ticker)
                 .map(stockMapper::toDTO);
