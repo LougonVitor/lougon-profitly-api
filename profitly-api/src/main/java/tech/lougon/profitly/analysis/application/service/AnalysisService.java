@@ -18,6 +18,7 @@ import tech.lougon.profitly.ticker.application.dto.TickerDTO;
 import tech.lougon.profitly.ticker.application.service.TickerService;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.*;
 import java.time.Instant;
 import java.util.List;
@@ -187,6 +188,27 @@ public class AnalysisService {
         BigDecimal profitMargins = s != null && s.profitMargins() != null
                 ? s.profitMargins()
                 : (f != null ? f.profitMargins() : null);
+
+        // P/L: compute from currentPrice / earningsPerShare when API doesn't supply it
+        if (trailingPE == null && earningsPerShare != null
+                && earningsPerShare.compareTo(BigDecimal.ZERO) != 0
+                && f != null && f.currentPrice() != null) {
+            trailingPE = f.currentPrice().divide(earningsPerShare, 2, RoundingMode.HALF_UP);
+        }
+
+        // EV/EBITDA: compute when API doesn't supply it
+        if (enterpriseToEbitda == null && enterpriseValue != null
+                && f != null && f.ebitda() != null && f.ebitda() != 0) {
+            enterpriseToEbitda = BigDecimal.valueOf(enterpriseValue)
+                    .divide(BigDecimal.valueOf(f.ebitda()), 2, RoundingMode.HALF_UP);
+        }
+
+        // EV/Receita: compute when API doesn't supply it
+        if (enterpriseToRevenue == null && enterpriseValue != null
+                && f != null && f.totalRevenue() != null && f.totalRevenue() != 0) {
+            enterpriseToRevenue = BigDecimal.valueOf(enterpriseValue)
+                    .divide(BigDecimal.valueOf(f.totalRevenue()), 2, RoundingMode.HALF_UP);
+        }
 
         TickerAnalysis analysis = new TickerAnalysis(
                 symbol, trailingPE, priceToBook, dividendYield, beta, earningsPerShare,
