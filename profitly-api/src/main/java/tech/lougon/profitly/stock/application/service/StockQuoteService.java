@@ -28,12 +28,13 @@ public class StockQuoteService {
         this.stockMapper = stockMapper;
     }
 
-    public StockQuoteDTO syncFromBrapi(String ticker) {
+    public StockQuoteDTO syncFromBrapi(String ticker, String assetType) {
         BrapiQuoteResponse response = brapiStockClient.fetchQuote(ticker);
 
         BrapiQuoteResponse.BrapiQuoteResult result = response.results().getFirst();
 
         StockQuote stockQuote = stockMapper.toDomain(result, response);
+        stockQuote.setAssetType(assetType);
         StockQuote saved = stockRepository.save(stockQuote);
 
         return stockMapper.toDTO(saved);
