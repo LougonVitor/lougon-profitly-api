@@ -21,7 +21,8 @@ public class StockPriceLookupImpl implements StockPriceLookup {
         return stockRepository.findByTicker(ticker)
                 .map(quote -> new StockMarketData(
                         quote.getData().regularMarketPrice(),
-                        quote.getData().logoUrl()
+                        quote.getData().logoUrl(),
+                        quote.getAssetType()
                 ));
     }
 }
