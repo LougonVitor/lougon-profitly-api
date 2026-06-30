@@ -2,9 +2,11 @@ package tech.lougon.profitly.stock.infrastructure.client;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiFiiListResponse;
 import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiQuoteResponse;
 import tech.lougon.profitly.stock.infrastructure.client.dto.BrapiTickerListResponse;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -37,5 +39,28 @@ public class BrapiStockClient {
                 .retrieve()
                 .bodyToMono(BrapiTickerListResponse.class)
                 .block();
+    }
+
+    public List<String> fetchAllFiiSymbols() {
+        List<String> symbols = new ArrayList<>();
+        int page = 1;
+        boolean hasNext = true;
+
+        while (hasNext) {
+            int p = page;
+            BrapiFiiListResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/fii/list").queryParam("page", p).queryParam("limit", 100).build())
+                    .retrieve()
+                    .bodyToMono(BrapiFiiListResponse.class)
+                    .block();
+
+            if (response == null || response.fiis() == null) break;
+
+            response.fiis().forEach(f -> symbols.add(f.symbol()));
+            hasNext = response.pagination() != null && response.pagination().hasNextPage();
+            page++;
+        }
+
+        return symbols;
     }
 }
