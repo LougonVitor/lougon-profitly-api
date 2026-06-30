@@ -36,4 +36,9 @@ public class WalletRepositoryImpl implements WalletRepository {
                 .map(walletMapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public void deleteById(String id) {
+        jpaWalletRepository.deleteById(id);
+    }
 }

@@ -48,6 +48,12 @@ public class WalletController {
                 .body(WalletSummaryResponse.from(walletService.create(request.name(), userId)));
     }
 
+    @DeleteMapping("/{walletId}")
+    public ResponseEntity<Void> deleteWallet(@PathVariable String walletId) {
+        walletService.deleteWallet(walletId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{walletId}/positions/{ticker}/entries")
     public ResponseEntity<WalletSummaryResponse> addEntry(
             @PathVariable String walletId,

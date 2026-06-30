@@ -53,6 +53,10 @@ public class WalletService {
         return walletMapper.toSummaryDTO(saved, Map.of());
     }
 
+    public void deleteWallet(String walletId) {
+        walletRepository.deleteById(walletId);
+    }
+
     public WalletSummaryDTO addEntry(String walletId, String ticker, AddEntryRequest request) {
         Wallet wallet = walletRepository.findById(walletId)
                 .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
