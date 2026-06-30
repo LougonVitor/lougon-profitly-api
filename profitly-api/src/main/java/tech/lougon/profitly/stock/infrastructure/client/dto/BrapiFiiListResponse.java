@@ -1,7 +1,9 @@
 package tech.lougon.profitly.stock.infrastructure.client.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -10,8 +12,14 @@ public record BrapiFiiListResponse(
         Pagination pagination
 ) {
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record BrapiFii(String symbol) {}
+    public record BrapiFii(
+            @JsonProperty("symbol") String symbol,
+            @JsonProperty("name")   String name,
+            @JsonProperty("price")  BigDecimal price
+    ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Pagination(boolean hasNextPage) {}
+    public record Pagination(
+            @JsonProperty("hasNextPage") boolean hasNextPage
+    ) {}
 }
