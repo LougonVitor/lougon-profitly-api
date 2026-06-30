@@ -25,6 +25,10 @@ public class TickerService {
         return tickerRepository.findAll().stream().map(this::toDTO).toList();
     }
 
+    public java.util.Optional<TickerDTO> findBySymbol(String symbol) {
+        return tickerRepository.findBySymbol(symbol).map(this::toDTO);
+    }
+
     public void syncAll() {
         List<BrapiTickerResponse.TickerItem> items = brapiClient.fetchAllTickers();
 
