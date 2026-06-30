@@ -35,8 +35,8 @@ public class WalletService {
         this.walletMapper = walletMapper;
     }
 
-    public List<WalletSummaryDTO> findAll() {
-        return walletRepository.findAll().stream()
+    public List<WalletSummaryDTO> findAll(String userId) {
+        return walletRepository.findByUserId(userId).stream()
                 .map(wallet -> walletMapper.toSummaryDTO(wallet, resolveMarketData(wallet)))
                 .toList();
     }
@@ -45,6 +45,12 @@ public class WalletService {
         Wallet wallet = walletRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + id));
         return walletMapper.toSummaryDTO(wallet, resolveMarketData(wallet));
+    }
+
+    public WalletSummaryDTO create(String name, String userId) {
+        Wallet wallet = new Wallet(null, name, userId, List.of(), Instant.now());
+        Wallet saved = walletRepository.save(wallet);
+        return walletMapper.toSummaryDTO(saved, Map.of());
     }
 
     public WalletSummaryDTO addEntry(String walletId, String ticker, AddEntryRequest request) {
