@@ -9,44 +9,61 @@ import java.util.Optional;
 @Repository
 public class UserRepositoryImpl implements UserRepository {
 
-    private final JpaUserRepository jpaUserRepository;
+    private final JpaUserRepository jpa;
 
-    public UserRepositoryImpl(JpaUserRepository jpaUserRepository) {
-        this.jpaUserRepository = jpaUserRepository;
+    public UserRepositoryImpl(JpaUserRepository jpa) {
+        this.jpa = jpa;
     }
 
     @Override
     public User save(User user) {
-        UserJpaEntity entity = toEntity(user);
-        return toDomain(jpaUserRepository.save(entity));
+        return toDomain(jpa.save(toEntity(user)));
     }
 
     @Override
     public Optional<User> findByEmail(String email) {
-        return jpaUserRepository.findByEmail(email).map(this::toDomain);
+        return jpa.findByEmail(email).map(this::toDomain);
     }
 
     @Override
     public Optional<User> findByUsername(String username) {
-        return jpaUserRepository.findByUsername(username).map(this::toDomain);
+        return jpa.findByUsername(username).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<User> findByGoogleId(String googleId) {
+        return jpa.findByGoogleId(googleId).map(this::toDomain);
     }
 
     @Override
     public boolean existsByEmail(String email) {
-        return jpaUserRepository.existsByEmail(email);
+        return jpa.existsByEmail(email);
     }
 
-    private UserJpaEntity toEntity(User user) {
-        UserJpaEntity entity = new UserJpaEntity();
-        entity.setId(user.id());
-        entity.setUsername(user.username());
-        entity.setEmail(user.email());
-        entity.setPassword(user.password());
-        entity.setCreatedAt(user.createdAt());
-        return entity;
+    @Override
+    public boolean existsByUsername(String username) {
+        return jpa.existsByUsername(username);
     }
 
-    private User toDomain(UserJpaEntity entity) {
-        return new User(entity.getId(), entity.getUsername(), entity.getEmail(), entity.getPassword(), entity.getCreatedAt());
+    private UserJpaEntity toEntity(User u) {
+        UserJpaEntity e = new UserJpaEntity();
+        e.setId(u.id());
+        e.setUsername(u.username());
+        e.setEmail(u.email());
+        e.setPassword(u.password());
+        e.setPhone(u.phone());
+        e.setGoogleId(u.googleId());
+        e.setEmailConsent(u.emailConsent());
+        e.setSmsConsent(u.smsConsent());
+        e.setCreatedAt(u.createdAt());
+        return e;
+    }
+
+    private User toDomain(UserJpaEntity e) {
+        return new User(
+                e.getId(), e.getUsername(), e.getEmail(), e.getPassword(),
+                e.getPhone(), e.getGoogleId(), e.isEmailConsent(), e.isSmsConsent(),
+                e.getCreatedAt()
+        );
     }
 }
