@@ -2,9 +2,7 @@ package tech.lougon.profitly.ticker.infrastructure.scheduler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.ticker.application.service.TickerService;
 
@@ -18,11 +16,10 @@ public class TickerSyncScheduler {
         this.tickerService = tickerService;
     }
 
-    //@Async
-    //@EventListener(ApplicationReadyEvent.class)
-    public void syncOnStartup() {
-        log.info("Starting ticker sync from /api/v2/tickers");
+    @Scheduled(cron = "0 0 19 * * *", zone = "America/Sao_Paulo")
+    public void scheduledSync() {
+        log.info("Daily 19h ticker sync started");
         tickerService.syncAll();
-        log.info("Ticker sync finished");
+        log.info("Daily 19h ticker sync finished");
     }
 }

@@ -24,9 +24,9 @@ public class AnalysisWarmupRunner {
         this.tickerService = tickerService;
     }
 
-    @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 5 19 * * *", zone = "America/Sao_Paulo")
     public void scheduledSync() {
-        log.info("Daily 18h sync triggered");
+        log.info("Daily 19h05 analysis sync triggered");
         syncAsync();
     }
 
