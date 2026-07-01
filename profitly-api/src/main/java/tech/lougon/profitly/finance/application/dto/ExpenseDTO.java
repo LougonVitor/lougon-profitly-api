@@ -14,10 +14,11 @@ public record ExpenseDTO(
         BigDecimal realValue,
         ExpenseStatus status,
         ExpenseType type,
-        Instant createdAt
+        Instant createdAt,
+        boolean recurring
 ) {
     public static ExpenseDTO from(Expense e) {
         return new ExpenseDTO(e.id(), e.title(), e.estimatedValue(),
-                e.realValue(), e.status(), e.type(), e.createdAt());
+                e.realValue(), e.status(), e.type(), e.createdAt(), e.recurring());
     }
 }

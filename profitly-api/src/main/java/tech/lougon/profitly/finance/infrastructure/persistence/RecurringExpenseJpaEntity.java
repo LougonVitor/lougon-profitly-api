@@ -1,15 +1,13 @@
 package tech.lougon.profitly.finance.infrastructure.persistence;
 
 import jakarta.persistence.*;
-import tech.lougon.profitly.finance.domain.model.ExpenseStatus;
 import tech.lougon.profitly.finance.domain.model.ExpenseType;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 
 @Entity
-@Table(name = "finance_expenses")
-public class ExpenseJpaEntity {
+@Table(name = "finance_recurring_expenses")
+public class RecurringExpenseJpaEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,24 +21,11 @@ public class ExpenseJpaEntity {
 
     private BigDecimal estimatedValue;
 
-    @Column(nullable = false)
-    private BigDecimal realValue;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ExpenseStatus status;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ExpenseType type;
 
-    @Column(nullable = false)
-    private Instant createdAt;
-
-    @Column(nullable = false)
-    private boolean recurring;
-
-    public ExpenseJpaEntity() {}
+    public RecurringExpenseJpaEntity() {}
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -50,14 +35,6 @@ public class ExpenseJpaEntity {
     public void setTitle(String title) { this.title = title; }
     public BigDecimal getEstimatedValue() { return estimatedValue; }
     public void setEstimatedValue(BigDecimal estimatedValue) { this.estimatedValue = estimatedValue; }
-    public BigDecimal getRealValue() { return realValue; }
-    public void setRealValue(BigDecimal realValue) { this.realValue = realValue; }
-    public ExpenseStatus getStatus() { return status; }
-    public void setStatus(ExpenseStatus status) { this.status = status; }
     public ExpenseType getType() { return type; }
     public void setType(ExpenseType type) { this.type = type; }
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
-    public boolean isRecurring() { return recurring; }
-    public void setRecurring(boolean recurring) { this.recurring = recurring; }
 }

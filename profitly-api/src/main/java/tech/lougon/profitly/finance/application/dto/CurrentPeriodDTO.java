@@ -1,5 +1,6 @@
 package tech.lougon.profitly.finance.application.dto;
 
+import tech.lougon.profitly.finance.domain.model.AdditionalIncome;
 import tech.lougon.profitly.finance.domain.model.Expense;
 import tech.lougon.profitly.finance.domain.model.FinanceSettings;
 
@@ -13,9 +14,11 @@ public record CurrentPeriodDTO(
         BigDecimal totalReal,
         BigDecimal totalEstimated,
         BigDecimal balance,
-        int resetDay
+        int resetDay,
+        List<AdditionalIncome> additionalIncomes,
+        BigDecimal totalIncome
 ) {
-    public static CurrentPeriodDTO from(List<Expense> expenses, FinanceSettings settings) {
+    public static CurrentPeriodDTO from(List<Expense> expenses, FinanceSettings settings, List<AdditionalIncome> additionalIncomes) {
         BigDecimal totalReal = expenses.stream()
                 .map(Expense::realValue)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -24,10 +27,14 @@ public record CurrentPeriodDTO(
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal salary = settings.netSalary() != null ? settings.netSalary() : BigDecimal.ZERO;
         BigDecimal investment = settings.investmentTarget() != null ? settings.investmentTarget() : BigDecimal.ZERO;
-        BigDecimal balance = salary.subtract(investment).subtract(totalReal);
+        BigDecimal additionalTotal = additionalIncomes.stream()
+                .map(AdditionalIncome::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalIncome = salary.add(additionalTotal);
+        BigDecimal balance = totalIncome.subtract(investment).subtract(totalReal);
 
         List<ExpenseDTO> dtos = expenses.stream().map(ExpenseDTO::from).toList();
         return new CurrentPeriodDTO(dtos, settings.netSalary(), settings.investmentTarget(),
-                totalReal, totalEstimated, balance, settings.resetDay());
+                totalReal, totalEstimated, balance, settings.resetDay(), additionalIncomes, totalIncome);
     }
 }

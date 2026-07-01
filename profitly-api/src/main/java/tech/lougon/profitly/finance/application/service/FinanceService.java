@@ -1,6 +1,7 @@
 package tech.lougon.profitly.finance.application.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tech.lougon.profitly.finance.domain.model.*;
 import tech.lougon.profitly.finance.domain.repository.*;
 import tech.lougon.profitly.finance.presentation.request.*;
@@ -22,26 +23,63 @@ public class FinanceService {
     private final ExpenseRepository expenseRepository;
     private final FinanceSettingsRepository settingsRepository;
     private final ExpenseHistoryRepository historyRepository;
+    private final RecurringExpenseRepository recurringExpenseRepository;
+    private final AdditionalIncomeRepository additionalIncomeRepository;
 
     public FinanceService(ExpenseRepository expenseRepository,
                           FinanceSettingsRepository settingsRepository,
-                          ExpenseHistoryRepository historyRepository) {
+                          ExpenseHistoryRepository historyRepository,
+                          RecurringExpenseRepository recurringExpenseRepository,
+                          AdditionalIncomeRepository additionalIncomeRepository) {
         this.expenseRepository = expenseRepository;
         this.settingsRepository = settingsRepository;
         this.historyRepository = historyRepository;
+        this.recurringExpenseRepository = recurringExpenseRepository;
+        this.additionalIncomeRepository = additionalIncomeRepository;
     }
 
+    @Transactional
     public CurrentPeriodDTO getCurrentPeriod(String userId) {
         var settings = getOrCreateSettings(userId);
         var expenses = expenseRepository.findByUserId(userId);
-        return CurrentPeriodDTO.from(expenses, settings);
+
+        // Auto-populate recurring expenses not yet in current period
+        var recurringList = recurringExpenseRepository.findByUserId(userId);
+        Set<String> existingTitles = expenses.stream()
+                .map(e -> e.title().toLowerCase())
+                .collect(Collectors.toSet());
+
+        for (RecurringExpense recurring : recurringList) {
+            if (!existingTitles.contains(recurring.title().toLowerCase())) {
+                var newExpense = new Expense(null, userId, recurring.title(),
+                        recurring.estimatedValue(), BigDecimal.ZERO,
+                        ExpenseStatus.PENDING, recurring.type(), Instant.now(), true);
+                expenseRepository.save(newExpense);
+            }
+        }
+
+        // Ensure INVESTMENT expense exists
+        var investmentExpenses = expenses.stream()
+                .filter(e -> e.type() == ExpenseType.INVESTMENT)
+                .toList();
+        if (investmentExpenses.isEmpty()) {
+            var investmentExpense = new Expense(null, userId, "Investimento",
+                    null, BigDecimal.ZERO, ExpenseStatus.PENDING,
+                    ExpenseType.INVESTMENT, Instant.now(), true);
+            expenseRepository.save(investmentExpense);
+        }
+
+        // Reload after auto-population
+        var updatedExpenses = expenseRepository.findByUserId(userId);
+        var additionalIncomes = additionalIncomeRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        return CurrentPeriodDTO.from(updatedExpenses, settings, additionalIncomes);
     }
 
     public ExpenseDTO addExpense(String userId, AddExpenseRequest req) {
         var expense = new Expense(null, userId, req.title(),
                 req.estimatedValue(), req.realValue() != null ? req.realValue() : BigDecimal.ZERO,
                 req.status() != null ? req.status() : ExpenseStatus.PENDING,
-                req.type(), Instant.now());
+                req.type(), Instant.now(), req.recurring());
         return ExpenseDTO.from(expenseRepository.save(expense));
     }
 
@@ -54,7 +92,7 @@ public class FinanceService {
         ExpenseStatus status = computeStatus(newReal, estimated);
 
         var updated = new Expense(existing.id(), existing.userId(), existing.title(),
-                estimated, newReal, status, existing.type(), existing.createdAt());
+                estimated, newReal, status, existing.type(), existing.createdAt(), existing.recurring());
         return ExpenseDTO.from(expenseRepository.save(updated));
     }
 
@@ -71,7 +109,7 @@ public class FinanceService {
                 req.title() != null ? req.title() : existing.title(),
                 estimated, realValue, status,
                 req.type() != null ? req.type() : existing.type(),
-                existing.createdAt());
+                existing.createdAt(), existing.recurring());
         return ExpenseDTO.from(expenseRepository.save(updated));
     }
 
@@ -129,6 +167,41 @@ public class FinanceService {
         var settings = getOrCreateSettings(userId);
         int today = LocalDate.now().getDayOfMonth();
         if (today == settings.resetDay()) resetPeriod(userId);
+    }
+
+    // Recurring expense methods
+
+    public List<RecurringExpense> getRecurring(String userId) {
+        return recurringExpenseRepository.findByUserId(userId);
+    }
+
+    public RecurringExpense saveRecurring(String userId, RecurringExpenseRequest req) {
+        var recurring = new RecurringExpense(null, userId, req.title(), req.estimatedValue(), req.type());
+        return recurringExpenseRepository.save(recurring);
+    }
+
+    @Transactional
+    public void deleteRecurring(String userId, Long id) {
+        var recurring = recurringExpenseRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Recorrente não encontrado"));
+        if (!recurring.userId().equals(userId)) throw new IllegalArgumentException("Acesso negado");
+
+        // Also delete matching expense in current period (case-insensitive title match)
+        expenseRepository.findByUserIdAndTitle(userId, recurring.title())
+                .ifPresent(e -> expenseRepository.deleteById(e.id()));
+
+        recurringExpenseRepository.deleteById(id);
+    }
+
+    // Additional income methods
+
+    public AdditionalIncome addIncome(String userId, AddIncomeRequest req) {
+        var income = new AdditionalIncome(null, userId, req.description(), req.amount(), Instant.now());
+        return additionalIncomeRepository.save(income);
+    }
+
+    public void deleteIncome(String userId, Long id) {
+        additionalIncomeRepository.deleteById(id);
     }
 
     private FinanceSettings getOrCreateSettings(String userId) {

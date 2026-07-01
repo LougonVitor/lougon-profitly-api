@@ -11,5 +11,6 @@ public record Expense(
         BigDecimal realValue,
         ExpenseStatus status,
         ExpenseType type,
-        Instant createdAt
+        Instant createdAt,
+        boolean recurring
 ) {}
