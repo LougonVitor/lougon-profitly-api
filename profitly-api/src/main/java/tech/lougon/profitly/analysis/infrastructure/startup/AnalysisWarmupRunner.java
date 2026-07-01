@@ -2,8 +2,6 @@ package tech.lougon.profitly.analysis.infrastructure.startup;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,7 +11,7 @@ import tech.lougon.profitly.ticker.application.service.TickerService;
 import java.util.List;
 
 @Component
-public class AnalysisWarmupRunner implements ApplicationRunner {
+public class AnalysisWarmupRunner {
 
     private static final Logger log = LoggerFactory.getLogger(AnalysisWarmupRunner.class);
     private static final long DELAY_MS = 500;
@@ -24,11 +22,6 @@ public class AnalysisWarmupRunner implements ApplicationRunner {
     public AnalysisWarmupRunner(AnalysisService analysisService, TickerService tickerService) {
         this.analysisService = analysisService;
         this.tickerService = tickerService;
-    }
-
-    @Override
-    public void run(ApplicationArguments args) {
-        syncAsync();
     }
 
     @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "America/Sao_Paulo")
