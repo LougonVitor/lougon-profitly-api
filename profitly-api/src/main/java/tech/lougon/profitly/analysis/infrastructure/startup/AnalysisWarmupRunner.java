@@ -41,7 +41,7 @@ public class AnalysisWarmupRunner {
         int success = 0, failed = 0;
         for (String symbol : symbols) {
             try {
-                analysisService.getAnalysis(symbol);
+                analysisService.forceSync(symbol);
                 success++;
                 Thread.sleep(DELAY_MS);
             } catch (InterruptedException e) {

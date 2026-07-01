@@ -20,7 +20,6 @@ import tech.lougon.profitly.ticker.application.service.TickerService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.*;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,8 +27,6 @@ import java.util.Optional;
 public class AnalysisService {
 
     private static final Logger log = LoggerFactory.getLogger(AnalysisService.class);
-    private static final Duration STATS_TTL = Duration.ofHours(6);
-    private static final Duration DIVIDENDS_TTL = Duration.ofHours(24);
 
     private final TickerService tickerService;
     private final TickerAnalysisRepository analysisRepository;
@@ -53,10 +50,57 @@ public class AnalysisService {
         var ticker = tickerService.findBySymbol(symbol)
                 .orElseThrow(() -> new IllegalArgumentException("Ticker not found: " + symbol));
 
-        TickerAnalysis stats = resolveStats(symbol);
-        List<DividendEvent> dividends = resolveDividends(symbol, ticker, stats);
+        TickerAnalysis stats = analysisRepository.findBySymbol(symbol)
+                .orElseGet(() -> emptyAnalysis(symbol));
+        List<DividendEvent> dividends = dividendRepository.findBySymbol(symbol);
 
         return TickerAnalysisDTO.of(ticker, stats, dividends);
+    }
+
+    public void forceSync(String symbol) {
+        var tickerOpt = tickerService.findBySymbol(symbol);
+        if (tickerOpt.isEmpty()) {
+            log.warn("forceSync: ticker not found {}", symbol);
+            return;
+        }
+        var ticker = tickerOpt.get();
+
+        log.info("Syncing analysis for {}", symbol);
+        var statsData     = brapiClient.fetchStatistics(symbol);
+        var financialData = brapiClient.fetchFinancialData(symbol);
+        TickerAnalysis stats = buildAndSave(symbol, statsData.orElse(null), financialData.orElse(null));
+
+        boolean isFii = "FII".equalsIgnoreCase(ticker.assetType())
+                || "FII".equalsIgnoreCase(ticker.subType());
+        var raw = isFii ? brapiClient.fetchFiiDividends(symbol) : brapiClient.fetchDividends(symbol);
+
+        List<DividendEvent> events = raw.stream()
+                .map(d -> new DividendEvent(symbol, d.assetIssued(), d.paymentDate(), d.rate(),
+                        d.relatedTo(), d.approvedOn(), d.label(), d.lastDatePrior(), d.remarks()))
+                .toList();
+
+        try {
+            dividendRepository.replaceAll(symbol, events);
+            TickerAnalysis updated = new TickerAnalysis(
+                    stats.symbol(), stats.trailingPE(), stats.priceToBook(),
+                    stats.dividendYield(), stats.beta(), stats.earningsPerShare(),
+                    stats.forwardPE(), stats.pegRatio(), stats.enterpriseToRevenue(),
+                    stats.enterpriseToEbitda(), stats.marketCap(), stats.enterpriseValue(),
+                    stats.bookValue(), stats.weekChange52(), stats.profitMargins(),
+                    stats.sharesOutstanding(), stats.floatShares(),
+                    stats.lastDividendValue(), stats.lastDividendDate(),
+                    stats.syncedAt(), Instant.now()
+            );
+            analysisRepository.save(updated);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("Concurrent dividend refresh for {} — skipping", symbol);
+        }
+    }
+
+    private TickerAnalysis emptyAnalysis(String symbol) {
+        return new TickerAnalysis(symbol, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null);
     }
 
     public List<PricePointDTO> getPriceHistory(String symbol, String range) {
@@ -91,74 +135,8 @@ public class AnalysisService {
                 .stream().map(PricePointDTO::from).toList();
     }
 
+
     // ── Private helpers ──────────────────────────────────────────────────────
-
-    private TickerAnalysis resolveStats(String symbol) {
-        Optional<TickerAnalysis> cached = analysisRepository.findBySymbol(symbol);
-
-        // Only use cache if fresh AND has some meaningful data
-        if (cached.isPresent() && !isStale(cached.get().syncedAt(), STATS_TTL) && hasData(cached.get())) {
-            return cached.get();
-        }
-
-        log.info("Fetching statistics for {}", symbol);
-        var statsData    = brapiClient.fetchStatistics(symbol);
-        var financialData = brapiClient.fetchFinancialData(symbol);
-
-        return buildAndSave(symbol, statsData.orElse(null), financialData.orElse(null));
-    }
-
-    private boolean hasData(TickerAnalysis a) {
-        return a.trailingPE() != null || a.priceToBook() != null || a.beta() != null
-                || a.dividendYield() != null || a.earningsPerShare() != null
-                || a.profitMargins() != null;
-    }
-
-    private List<DividendEvent> resolveDividends(String symbol, TickerDTO ticker, TickerAnalysis stats) {
-        List<DividendEvent> cached = dividendRepository.findBySymbol(symbol);
-        boolean dividendsStale = stats.dividendsSyncedAt() == null
-                || isStale(stats.dividendsSyncedAt(), DIVIDENDS_TTL)
-                || cached.isEmpty();
-
-        if (dividendsStale) {
-            log.info("Fetching dividends for {}", symbol);
-            boolean isFii = "FII".equalsIgnoreCase(ticker.assetType())
-                    || "FII".equalsIgnoreCase(ticker.subType());
-
-            var raw = isFii
-                    ? brapiClient.fetchFiiDividends(symbol)
-                    : brapiClient.fetchDividends(symbol);
-
-            List<DividendEvent> events = raw.stream()
-                    .map(d -> new DividendEvent(
-                            symbol, d.assetIssued(), d.paymentDate(), d.rate(),
-                            d.relatedTo(), d.approvedOn(), d.label(),
-                            d.lastDatePrior(), d.remarks()
-                    ))
-                    .toList();
-
-            try {
-                dividendRepository.replaceAll(symbol, events);
-
-                TickerAnalysis updated = new TickerAnalysis(
-                        stats.symbol(), stats.trailingPE(), stats.priceToBook(),
-                        stats.dividendYield(), stats.beta(), stats.earningsPerShare(),
-                        stats.forwardPE(), stats.pegRatio(), stats.enterpriseToRevenue(),
-                        stats.enterpriseToEbitda(), stats.marketCap(), stats.enterpriseValue(),
-                        stats.bookValue(), stats.weekChange52(), stats.profitMargins(),
-                        stats.sharesOutstanding(), stats.floatShares(),
-                        stats.lastDividendValue(), stats.lastDividendDate(),
-                        stats.syncedAt(), Instant.now()
-                );
-                analysisRepository.save(updated);
-                return events;
-            } catch (org.springframework.dao.DataIntegrityViolationException e) {
-                log.warn("Concurrent dividend refresh for {} — reading from DB", symbol);
-            }
-        }
-
-        return cached;
-    }
 
     private TickerAnalysis buildAndSave(String symbol,
                                         BrapiStatisticsResponse.Data s,
@@ -211,10 +189,6 @@ public class AnalysisService {
                 Instant.now(), null
         );
         return analysisRepository.save(analysis);
-    }
-
-    private boolean isStale(Instant syncedAt, Duration ttl) {
-        return syncedAt == null || Instant.now().isAfter(syncedAt.plus(ttl));
     }
 
     private LocalDate resolveFromDate(String range) {
