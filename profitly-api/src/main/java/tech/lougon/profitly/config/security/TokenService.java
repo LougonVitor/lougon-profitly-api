@@ -32,6 +32,20 @@ public class TokenService {
         }
     }
 
+    public String generateTokenForUserId(String userId, String username) {
+        try {
+            Algorithm algorithm = Algorithm.HMAC256(secret);
+            return JWT.create()
+                    .withIssuer("profitly")
+                    .withSubject(username)
+                    .withClaim("userId", userId)
+                    .withExpiresAt(expirationDate())
+                    .sign(algorithm);
+        } catch (JWTCreationException ex) {
+            throw new RuntimeException("Error generating token", ex);
+        }
+    }
+
     public String validateToken(String token) {
         try {
             Algorithm algorithm = Algorithm.HMAC256(secret);
