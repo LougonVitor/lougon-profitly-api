@@ -26,12 +26,12 @@ public record CurrentPeriodDTO(
                 .map(e -> e.estimatedValue() != null ? e.estimatedValue() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal salary = settings.netSalary() != null ? settings.netSalary() : BigDecimal.ZERO;
-        BigDecimal investment = settings.investmentTarget() != null ? settings.investmentTarget() : BigDecimal.ZERO;
         BigDecimal additionalTotal = additionalIncomes.stream()
                 .map(AdditionalIncome::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalIncome = salary.add(additionalTotal);
-        BigDecimal balance = totalIncome.subtract(investment).subtract(totalReal);
+        // Investment is already an expense row in totalReal — do not subtract investmentTarget separately
+        BigDecimal balance = totalIncome.subtract(totalReal);
 
         List<ExpenseDTO> dtos = expenses.stream().map(ExpenseDTO::from).toList();
         return new CurrentPeriodDTO(dtos, settings.netSalary(), settings.investmentTarget(),
