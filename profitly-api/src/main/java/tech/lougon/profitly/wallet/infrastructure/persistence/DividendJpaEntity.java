@@ -35,6 +35,9 @@ public class DividendJpaEntity {
     @Column(name = "payment_date", nullable = false)
     private LocalDate paymentDate;
 
+    @Column(name = "ex_date")
+    private LocalDate exDate;
+
     @Column(nullable = false)
     private String type;
 

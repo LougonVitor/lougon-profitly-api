@@ -11,6 +11,7 @@ public record Dividend(
         String ticker,
         BigDecimal totalAmount,
         LocalDate paymentDate,
+        LocalDate exDate,
         String type,
         boolean received,
         Instant createdAt

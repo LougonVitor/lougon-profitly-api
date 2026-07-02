@@ -10,6 +10,7 @@ import tech.lougon.profitly.wallet.presentation.request.AddDividendRequest;
 
 import java.util.List;
 
+
 @RestController
 @RequestMapping("/api/wallets/{walletId}/dividends")
 public class DividendController {
@@ -37,6 +38,12 @@ public class DividendController {
                                             @PathVariable String walletId,
                                             @PathVariable String id) {
         return ResponseEntity.ok(service.toggleReceived(id, userId));
+    }
+
+    @PostMapping("/sync")
+    public ResponseEntity<List<Dividend>> sync(@AuthenticationPrincipal String userId,
+                                               @PathVariable String walletId) {
+        return ResponseEntity.ok(service.syncFromMarket(walletId, userId));
     }
 
     @DeleteMapping("/{id}")

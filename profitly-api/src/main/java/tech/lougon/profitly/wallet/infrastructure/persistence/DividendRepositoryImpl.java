@@ -4,6 +4,7 @@ import org.springframework.stereotype.Repository;
 import tech.lougon.profitly.wallet.domain.model.Dividend;
 import tech.lougon.profitly.wallet.domain.repository.DividendRepository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +37,11 @@ public class DividendRepositoryImpl implements DividendRepository {
         jpa.deleteById(id);
     }
 
+    @Override
+    public boolean existsByWalletIdAndTickerAndPaymentDate(String walletId, String ticker, LocalDate paymentDate) {
+        return jpa.existsByWalletIdAndTickerAndPaymentDate(walletId, ticker, paymentDate);
+    }
+
     private DividendJpaEntity toEntity(Dividend d) {
         var e = new DividendJpaEntity();
         e.setId(d.id());
@@ -44,6 +50,7 @@ public class DividendRepositoryImpl implements DividendRepository {
         e.setTicker(d.ticker());
         e.setTotalAmount(d.totalAmount());
         e.setPaymentDate(d.paymentDate());
+        e.setExDate(d.exDate());
         e.setType(d.type());
         e.setReceived(d.received());
         e.setCreatedAt(d.createdAt());
@@ -52,6 +59,6 @@ public class DividendRepositoryImpl implements DividendRepository {
 
     private Dividend toDomain(DividendJpaEntity e) {
         return new Dividend(e.getId(), e.getWalletId(), e.getUserId(), e.getTicker(),
-                e.getTotalAmount(), e.getPaymentDate(), e.getType(), e.isReceived(), e.getCreatedAt());
+                e.getTotalAmount(), e.getPaymentDate(), e.getExDate(), e.getType(), e.isReceived(), e.getCreatedAt());
     }
 }
