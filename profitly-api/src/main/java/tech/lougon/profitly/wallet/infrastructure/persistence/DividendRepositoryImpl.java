@@ -7,7 +7,7 @@ import tech.lougon.profitly.wallet.domain.repository.DividendRepository;
 import java.util.List;
 import java.util.Optional;
 
-@Repository
+@Repository("walletDividendRepositoryImpl")
 public class DividendRepositoryImpl implements DividendRepository {
 
     private final JpaDividendRepository jpa;
