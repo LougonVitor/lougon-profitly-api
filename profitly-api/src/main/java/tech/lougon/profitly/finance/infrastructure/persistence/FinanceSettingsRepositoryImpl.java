@@ -4,6 +4,7 @@ import org.springframework.stereotype.Repository;
 import tech.lougon.profitly.finance.domain.model.FinanceSettings;
 import tech.lougon.profitly.finance.domain.repository.FinanceSettingsRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -23,6 +24,11 @@ public class FinanceSettingsRepositoryImpl implements FinanceSettingsRepository 
     @Override
     public Optional<FinanceSettings> findByUserId(String userId) {
         return jpa.findById(userId).map(this::toDomain);
+    }
+
+    @Override
+    public List<String> findAllUserIds() {
+        return jpa.findAll().stream().map(FinanceSettingsJpaEntity::getUserId).toList();
     }
 
     private FinanceSettingsJpaEntity toEntity(FinanceSettings s) {
