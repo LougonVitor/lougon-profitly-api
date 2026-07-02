@@ -26,9 +26,11 @@ public class IbovespaService {
             return new IbovespaResponse(0, 0, 0, 0, List.of());
         }
 
-        // brapi returns newest-first; reverse to chronological order
-        List<BrapiHistoricalResponse.PriceBar> bars = new java.util.ArrayList<>(raw);
-        java.util.Collections.reverse(bars);
+        // sort ascending by unix timestamp to guarantee chronological order
+        List<BrapiHistoricalResponse.PriceBar> bars = raw.stream()
+                .filter(b -> b.date() != null && b.close() != null)
+                .sorted(java.util.Comparator.comparingLong(BrapiHistoricalResponse.PriceBar::date))
+                .toList();
 
         var last = bars.get(bars.size() - 1);
         var first = bars.get(0);
