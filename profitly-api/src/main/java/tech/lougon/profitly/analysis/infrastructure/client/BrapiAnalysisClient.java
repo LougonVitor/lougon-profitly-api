@@ -66,12 +66,16 @@ public class BrapiAnalysisClient {
     }
 
     public List<BrapiHistoricalResponse.PriceBar> fetchHistory(String symbol, String range) {
+        return fetchHistoryWithInterval(symbol, range, "1d");
+    }
+
+    public List<BrapiHistoricalResponse.PriceBar> fetchHistoryWithInterval(String symbol, String range, String interval) {
         try {
             BrapiHistoricalResponse response = webClient.get()
                     .uri(u -> u.path("/api/v2/stocks/historical")
                             .queryParam("symbols", symbol)
                             .queryParam("range", range)
-                            .queryParam("interval", "1d")
+                            .queryParam("interval", interval)
                             .build())
                     .retrieve()
                     .bodyToMono(BrapiHistoricalResponse.class)
