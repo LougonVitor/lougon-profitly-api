@@ -72,6 +72,11 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.getHistory(userId, from, to));
     }
 
+    @GetMapping("/reset/check")
+    public ResponseEntity<Boolean> checkResetConflict(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(financeService.hasPeriodConflict(userId));
+    }
+
     @PostMapping("/reset")
     public ResponseEntity<Void> resetPeriod(@AuthenticationPrincipal String userId) {
         financeService.resetPeriod(userId);

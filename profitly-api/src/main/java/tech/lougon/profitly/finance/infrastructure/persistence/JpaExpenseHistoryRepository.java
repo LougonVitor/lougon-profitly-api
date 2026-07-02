@@ -11,5 +11,8 @@ public interface JpaExpenseHistoryRepository extends JpaRepository<ExpenseHistor
     @Query("SELECT DISTINCT e.yearMonth FROM ExpenseHistoryJpaEntity e WHERE e.userId = :userId ORDER BY e.yearMonth ASC")
     List<String> findDistinctYearMonthsByUserId(String userId);
 
+    boolean existsByUserIdAndYearMonth(String userId, String yearMonth);
     void deleteByUserId(String userId);
+    void deleteByUserIdAndYearMonth(String userId, String yearMonth);
+    void deleteByUserIdAndYearMonthLessThan(String userId, String cutoff);
 }

@@ -76,9 +76,10 @@ public class FinanceService {
     }
 
     public ExpenseDTO addExpense(String userId, AddExpenseRequest req) {
+        BigDecimal realValue = req.realValue() != null ? req.realValue() : BigDecimal.ZERO;
         var expense = new Expense(null, userId, req.title(),
-                req.estimatedValue(), req.realValue() != null ? req.realValue() : BigDecimal.ZERO,
-                req.status() != null ? req.status() : ExpenseStatus.PENDING,
+                req.estimatedValue(), realValue,
+                computeStatus(realValue, req.estimatedValue()),
                 req.type(), Instant.now(), req.recurring());
         return ExpenseDTO.from(expenseRepository.save(expense));
     }
@@ -143,7 +144,8 @@ public class FinanceService {
         var expenses = expenseRepository.findByUserId(userId);
         if (expenses.isEmpty()) return;
 
-        String yearMonth = YM_FMT.format(YearMonth.now());
+        // Archive under the previous month — reset fires on day 1 of the new month
+        String yearMonth = YM_FMT.format(YearMonth.now().minusMonths(1));
 
         Map<ExpenseType, BigDecimal[]> grouped = new EnumMap<>(ExpenseType.class);
         for (Expense e : expenses) {
@@ -158,9 +160,20 @@ public class FinanceService {
                         entry.getKey(), entry.getValue()[0], entry.getValue()[1]))
                 .toList();
 
+        // Replace existing data for this month if present
+        historyRepository.deleteByUserIdAndYearMonth(userId, yearMonth);
         historyRepository.saveAll(summaries);
 
+        // Retain only the last 6 months
+        String cutoff = YM_FMT.format(YearMonth.now().minusMonths(6));
+        historyRepository.deleteOlderThan(userId, cutoff);
+
         for (Expense e : expenses) expenseRepository.deleteById(e.id());
+    }
+
+    public boolean hasPeriodConflict(String userId) {
+        String targetMonth = YM_FMT.format(YearMonth.now().minusMonths(1));
+        return historyRepository.existsByUserIdAndYearMonth(userId, targetMonth);
     }
 
     public void checkAndResetIfDue(String userId) {

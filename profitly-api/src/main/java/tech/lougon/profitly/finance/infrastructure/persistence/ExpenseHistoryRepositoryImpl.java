@@ -31,6 +31,21 @@ public class ExpenseHistoryRepositoryImpl implements ExpenseHistoryRepository {
         return jpa.findDistinctYearMonthsByUserId(userId);
     }
 
+    @Override
+    public boolean existsByUserIdAndYearMonth(String userId, String yearMonth) {
+        return jpa.existsByUserIdAndYearMonth(userId, yearMonth);
+    }
+
+    @Override
+    public void deleteByUserIdAndYearMonth(String userId, String yearMonth) {
+        jpa.deleteByUserIdAndYearMonth(userId, yearMonth);
+    }
+
+    @Override
+    public void deleteOlderThan(String userId, String cutoff) {
+        jpa.deleteByUserIdAndYearMonthLessThan(userId, cutoff);
+    }
+
     private ExpenseHistoryJpaEntity toEntity(ExpenseHistorySummary s) {
         var e = new ExpenseHistoryJpaEntity();
         e.setId(s.id());
