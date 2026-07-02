@@ -20,11 +20,15 @@ public class IbovespaService {
 
     public IbovespaResponse fetch(String range) {
         String interval = "1d".equals(range) ? "5m" : "1d";
-        List<BrapiHistoricalResponse.PriceBar> bars = client.fetchHistoryWithInterval(IBOV_SYMBOL, range, interval);
+        List<BrapiHistoricalResponse.PriceBar> raw = client.fetchHistoryWithInterval(IBOV_SYMBOL, range, interval);
 
-        if (bars.isEmpty()) {
+        if (raw.isEmpty()) {
             return new IbovespaResponse(0, 0, 0, 0, List.of());
         }
+
+        // brapi returns newest-first; reverse to chronological order
+        List<BrapiHistoricalResponse.PriceBar> bars = new java.util.ArrayList<>(raw);
+        java.util.Collections.reverse(bars);
 
         var last = bars.get(bars.size() - 1);
         var first = bars.get(0);
