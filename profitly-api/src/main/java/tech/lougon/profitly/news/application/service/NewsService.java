@@ -20,7 +20,9 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
@@ -33,6 +35,7 @@ public class NewsService {
 
     private static final Pattern HTML_TAG = Pattern.compile("<[^>]+>");
     private static final Pattern WHITESPACE = Pattern.compile("\\s{2,}");
+    private static final Pattern IMG_SRC = Pattern.compile("<img[^>]+src=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
 
     private static final List<String[]> FEEDS = List.of(
             new String[]{"https://www.infomoney.com.br/feed/", "InfoMoney"},
@@ -52,17 +55,23 @@ public class NewsService {
 
     public void sync() {
         log.info("Syncing market news from {} feeds", FEEDS.size());
-        int total = 0;
+        int created = 0, updated = 0;
         for (String[] feed : FEEDS) {
             List<NewsItemJpaEntity> items = fetchFeed(feed[0], feed[1]);
             for (NewsItemJpaEntity item : items) {
-                if (!repository.existsById(item.getId())) {
+                Optional<NewsItemJpaEntity> existing = repository.findById(item.getId());
+                if (existing.isEmpty()) {
                     repository.save(item);
-                    total++;
+                    created++;
+                } else if (item.getImageUrl() != null && existing.get().getImageUrl() == null) {
+                    NewsItemJpaEntity e = existing.get();
+                    e.setImageUrl(item.getImageUrl());
+                    repository.save(e);
+                    updated++;
                 }
             }
         }
-        log.info("News sync complete — {} new items saved", total);
+        log.info("News sync complete — {} new items, {} image updates", created, updated);
     }
 
     private List<NewsItemJpaEntity> fetchFeed(String feedUrl, String sourceName) {
@@ -85,9 +94,10 @@ public class NewsService {
                 String link  = text(item, "link");
                 if (title == null || link == null) continue;
 
-                String description = clean(text(item, "description"));
+                String rawDescription = text(item, "description");
+                String description = clean(rawDescription);
                 String pubDate     = text(item, "pubDate");
-                String imageUrl    = imageUrl(item);
+                String imageUrl    = imageUrl(item, rawDescription);
 
                 String id = UUID.nameUUIDFromBytes(link.getBytes()).toString();
 
@@ -114,12 +124,19 @@ public class NewsService {
         return nodes.item(0).getTextContent();
     }
 
-    private String imageUrl(Element item) {
+    private String imageUrl(Element item, String rawDescription) {
         // Try media:content
         NodeList media = item.getElementsByTagNameNS("*", "content");
-        if (media.getLength() > 0) {
-            String url = ((Element) media.item(0)).getAttribute("url");
-            if (url != null && !url.isBlank()) return url;
+        for (int i = 0; i < media.getLength(); i++) {
+            Element el = (Element) media.item(i);
+            String url    = el.getAttribute("url");
+            String medium = el.getAttribute("medium");
+            String type   = el.getAttribute("type");
+            if (url == null || url.isBlank()) continue;
+            boolean isImage = medium.equals("image")
+                    || type.startsWith("image")
+                    || url.matches("(?i).*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$");
+            if (isImage) return url;
         }
         // Try media:thumbnail
         NodeList thumb = item.getElementsByTagNameNS("*", "thumbnail");
@@ -127,11 +144,34 @@ public class NewsService {
             String url = ((Element) thumb.item(0)).getAttribute("url");
             if (url != null && !url.isBlank()) return url;
         }
-        // Try enclosure
+        // Try enclosure with image type
         NodeList enc = item.getElementsByTagName("enclosure");
-        if (enc.getLength() > 0) {
-            String url = ((Element) enc.item(0)).getAttribute("url");
-            if (url != null && !url.isBlank()) return url;
+        for (int i = 0; i < enc.getLength(); i++) {
+            Element el = (Element) enc.item(i);
+            String type = el.getAttribute("type");
+            String url  = el.getAttribute("url");
+            if (url != null && !url.isBlank() && type != null && type.startsWith("image")) return url;
+        }
+        // Try content:encoded for <img src="...">
+        NodeList encoded = item.getElementsByTagNameNS("*", "encoded");
+        if (encoded.getLength() > 0) {
+            String html = encoded.item(0).getTextContent();
+            String img = extractImgSrc(html);
+            if (img != null) return img;
+        }
+        // Try description HTML for <img src="...">
+        if (rawDescription != null) {
+            String img = extractImgSrc(rawDescription);
+            if (img != null) return img;
+        }
+        return null;
+    }
+
+    private String extractImgSrc(String html) {
+        Matcher m = IMG_SRC.matcher(html);
+        while (m.find()) {
+            String src = m.group(1).trim();
+            if (!src.isBlank() && !src.startsWith("data:")) return src;
         }
         return null;
     }
