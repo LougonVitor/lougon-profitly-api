@@ -44,15 +44,22 @@ public class RankingsService {
                 .filter(a -> tickerMap.containsKey(a.getSymbol()))
                 .collect(Collectors.toMap(TickerAnalysisJpaEntity::getSymbol, a -> a, (a, b) -> a));
 
-        // Max realistic market cap: R$ 2 trillion. Above that is a brapi data error.
+        // Liquidity floor: ignore micro-caps with no real market presence.
+        long minMarketCap = 500_000_000L;         // R$ 500 million
+        // Sanity ceiling: above R$ 2 trillion is a brapi data error.
         long maxMarketCap = 2_000_000_000_000L;
 
         // Average annual dividend per share: sum dividends per year, average across years.
-        Map<String, Double> avgAnnualDiv = computeAvgAnnualDividend();
+        // Minimum 3 years of payment history required to appear.
+        Map<String, Double> avgAnnualDiv = computeAvgAnnualDividend(3);
 
         // Build a synthetic list sorted by avgAnnualDiv for deduplication
         List<TickerAnalysisJpaEntity> sortedByAvgDiv = analysisMap.values().stream()
-                .filter(a -> avgAnnualDiv.containsKey(a.getSymbol()) && avgAnnualDiv.get(a.getSymbol()) > 0)
+                .filter(a -> avgAnnualDiv.containsKey(a.getSymbol())
+                        && avgAnnualDiv.get(a.getSymbol()) > 0
+                        && a.getMarketCap() != null
+                        && a.getMarketCap() >= minMarketCap
+                        && a.getMarketCap() <= maxMarketCap)
                 .sorted(Comparator.comparingDouble(a -> -avgAnnualDiv.get(a.getSymbol())))
                 .toList();
 
@@ -65,7 +72,7 @@ public class RankingsService {
         List<RankingItemDTO> marketCap = deduplicateByName(
                 analysisMap.values().stream()
                         .filter(a -> a.getMarketCap() != null
-                                && a.getMarketCap() > 0
+                                && a.getMarketCap() >= minMarketCap
                                 && a.getMarketCap() <= maxMarketCap)
                         .sorted(Comparator.comparingLong(TickerAnalysisJpaEntity::getMarketCap).reversed())
                         .toList(),
@@ -76,7 +83,10 @@ public class RankingsService {
         List<RankingItemDTO> revenue = deduplicateByName(
                 analysisMap.values().stream()
                         .filter(a -> a.getEnterpriseValue() != null && a.getEnterpriseToRevenue() != null
-                                && a.getEnterpriseToRevenue().compareTo(BigDecimal.ZERO) > 0)
+                                && a.getEnterpriseToRevenue().compareTo(BigDecimal.ZERO) > 0
+                                && a.getMarketCap() != null
+                                && a.getMarketCap() >= minMarketCap
+                                && a.getMarketCap() <= maxMarketCap)
                         .sorted(Comparator.comparingDouble(a ->
                                 -((TickerAnalysisJpaEntity) a).getEnterpriseValue()
                                         / ((TickerAnalysisJpaEntity) a).getEnterpriseToRevenue().doubleValue()))
@@ -88,7 +98,7 @@ public class RankingsService {
         return new RankingsDTO(dividendYield, marketCap, revenue);
     }
 
-    private Map<String, Double> computeAvgAnnualDividend() {
+    private Map<String, Double> computeAvgAnnualDividend(int minYears) {
         // sumBySymbolAndYear returns [symbol, year, sum] rows
         List<Object[]> rows = dividendRepo.sumBySymbolAndYear();
 
@@ -101,10 +111,12 @@ public class RankingsService {
             bySymbolYear.computeIfAbsent(symbol, k -> new HashMap<>()).put(year, total);
         }
 
-        // Average the per-year totals for each symbol
+        // Average the per-year totals; require at least minYears of history
         Map<String, Double> result = new HashMap<>();
         for (Map.Entry<String, Map<String, Double>> entry : bySymbolYear.entrySet()) {
-            double avg = entry.getValue().values().stream()
+            Map<String, Double> yearTotals = entry.getValue();
+            if (yearTotals.size() < minYears) continue;
+            double avg = yearTotals.values().stream()
                     .mapToDouble(Double::doubleValue).average().orElse(0);
             if (avg > 0) result.put(entry.getKey(), avg);
         }
