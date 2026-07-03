@@ -18,18 +18,18 @@ public interface JpaPricePointRepository extends JpaRepository<PricePointJpaEnti
     // Returns [year (int), avgClose] grouped by calendar year for a given symbol
     @Query(value = """
             SELECT EXTRACT(YEAR FROM p.date) AS yr, AVG(p.close) AS avg_close
-            FROM price_history p
+            FROM price_points p
             WHERE p.symbol = :symbol
             GROUP BY EXTRACT(YEAR FROM p.date)
             ORDER BY yr
             """, nativeQuery = true)
     List<Object[]> avgAnnualCloseBySymbol(@Param("symbol") String symbol);
 
-    // Symbols that have dividend_events but no price_history at all
+    // Symbols that have dividend_events but no price_points at all
     @Query(value = """
             SELECT DISTINCT d.symbol
             FROM dividend_events d
-            WHERE d.symbol NOT IN (SELECT DISTINCT p.symbol FROM price_history p)
+            WHERE d.symbol NOT IN (SELECT DISTINCT p.symbol FROM price_points p)
             """, nativeQuery = true)
     List<String> findSymbolsWithDividendsButNoPriceHistory();
 }
