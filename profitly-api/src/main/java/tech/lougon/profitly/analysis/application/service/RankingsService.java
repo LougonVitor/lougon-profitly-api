@@ -76,14 +76,14 @@ public class RankingsService {
             Map<String, TickerJpaEntity> tickerMap,
             java.util.function.Function<TickerAnalysisJpaEntity, Double> valueExtractor
     ) {
-        // Keep only the first (best) ticker seen per company name
-        java.util.Set<String> seenNames = new java.util.LinkedHashSet<>();
+        // Deduplicate by ticker prefix (strip trailing digits: PETR3/PETR4 → PETR).
+        // List is pre-sorted descending so first occurrence is always the best value.
+        java.util.Set<String> seenPrefixes = new java.util.LinkedHashSet<>();
         return sorted.stream()
                 .filter(a -> {
-                    var t = tickerMap.get(a.getSymbol());
-                    if (t == null) return false;
-                    String key = t.getLongName() != null ? t.getLongName().toUpperCase() : t.getName().toUpperCase();
-                    return seenNames.add(key);
+                    if (tickerMap.get(a.getSymbol()) == null) return false;
+                    String prefix = a.getSymbol().replaceAll("\\d+$", "").toUpperCase();
+                    return seenPrefixes.add(prefix);
                 })
                 .limit(5)
                 .map(a -> {
