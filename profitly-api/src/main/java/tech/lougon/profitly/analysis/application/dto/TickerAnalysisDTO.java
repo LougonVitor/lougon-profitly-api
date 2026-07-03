@@ -38,6 +38,7 @@ public record TickerAnalysisDTO(
         BigDecimal weekChange52,
         BigDecimal profitMargins,
         Long sharesOutstanding,
+        Long floatShares,
         BigDecimal lastDividendValue,
         String lastDividendDate,
 
@@ -72,7 +73,7 @@ public record TickerAnalysisDTO(
                 stats.enterpriseToRevenue(), stats.enterpriseToEbitda(),
                 stats.enterpriseValue(),
                 stats.bookValue(), stats.weekChange52(), stats.profitMargins(),
-                stats.sharesOutstanding(), stats.lastDividendValue(), stats.lastDividendDate(),
+                stats.sharesOutstanding(), stats.floatShares(), stats.lastDividendValue(), stats.lastDividendDate(),
                 dividends, historicalDyByYear, stats.syncedAt()
         );
     }

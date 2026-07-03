@@ -6,6 +6,7 @@ import tech.lougon.profitly.analysis.domain.model.DividendEvent;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public record TickerAnalysisResponse(
         String symbol,
@@ -33,9 +34,11 @@ public record TickerAnalysisResponse(
         BigDecimal weekChange52,
         BigDecimal profitMargins,
         Long sharesOutstanding,
+        Long floatShares,
         BigDecimal lastDividendValue,
         String lastDividendDate,
         List<DividendItem> dividends,
+        Map<Integer, Double> historicalDyByYear,
         Instant syncedAt
 ) {
     public record DividendItem(
@@ -43,8 +46,10 @@ public record TickerAnalysisResponse(
             String paymentDate,
             Double rate,
             String relatedTo,
+            String approvedOn,
             String label,
-            String lastDatePrior
+            String lastDatePrior,
+            String remarks
     ) {}
 
     public static TickerAnalysisResponse from(TickerAnalysisDTO dto) {
@@ -52,7 +57,7 @@ public record TickerAnalysisResponse(
                 dto.dividends().stream()
                         .map(d -> new DividendItem(
                                 d.assetIssued(), d.paymentDate(), d.rate(),
-                                d.relatedTo(), d.label(), d.lastDatePrior()
+                                d.relatedTo(), d.approvedOn(), d.label(), d.lastDatePrior(), d.remarks()
                         ))
                         .toList();
 
@@ -64,9 +69,9 @@ public record TickerAnalysisResponse(
                 dto.earningsPerShare(), dto.forwardPE(), dto.pegRatio(),
                 dto.enterpriseToRevenue(), dto.enterpriseToEbitda(),
                 dto.enterpriseValue(), dto.bookValue(), dto.weekChange52(),
-                dto.profitMargins(), dto.sharesOutstanding(),
+                dto.profitMargins(), dto.sharesOutstanding(), dto.floatShares(),
                 dto.lastDividendValue(), dto.lastDividendDate(),
-                dividendItems, dto.syncedAt()
+                dividendItems, dto.historicalDyByYear(), dto.syncedAt()
         );
     }
 }
