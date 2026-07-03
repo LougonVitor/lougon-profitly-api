@@ -3,13 +3,16 @@ package tech.lougon.profitly.analysis.application.service;
 import org.springframework.stereotype.Service;
 import tech.lougon.profitly.analysis.application.dto.RankingItemDTO;
 import tech.lougon.profitly.analysis.application.dto.RankingsDTO;
+import tech.lougon.profitly.analysis.infrastructure.persistence.JpaDividendEventRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaTickerAnalysisRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.TickerAnalysisJpaEntity;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
 import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -19,11 +22,14 @@ public class RankingsService {
 
     private final JpaTickerRepository tickerRepo;
     private final JpaTickerAnalysisRepository analysisRepo;
+    private final JpaDividendEventRepository dividendRepo;
 
     public RankingsService(JpaTickerRepository tickerRepo,
-                           JpaTickerAnalysisRepository analysisRepo) {
+                           JpaTickerAnalysisRepository analysisRepo,
+                           JpaDividendEventRepository dividendRepo) {
         this.tickerRepo = tickerRepo;
         this.analysisRepo = analysisRepo;
+        this.dividendRepo = dividendRepo;
     }
 
     public RankingsDTO getRankings(String assetType) {
@@ -38,20 +44,22 @@ public class RankingsService {
                 .filter(a -> tickerMap.containsKey(a.getSymbol()))
                 .collect(Collectors.toMap(TickerAnalysisJpaEntity::getSymbol, a -> a, (a, b) -> a));
 
-        // Max realistic DY for Brazilian stocks: 50%. Above that is a brapi data error.
-        BigDecimal maxDy = new BigDecimal("50");
         // Max realistic market cap: R$ 2 trillion. Above that is a brapi data error.
         long maxMarketCap = 2_000_000_000_000L;
 
+        // Average annual dividend per share: sum dividends per year, average across years.
+        Map<String, Double> avgAnnualDiv = computeAvgAnnualDividend();
+
+        // Build a synthetic list sorted by avgAnnualDiv for deduplication
+        List<TickerAnalysisJpaEntity> sortedByAvgDiv = analysisMap.values().stream()
+                .filter(a -> avgAnnualDiv.containsKey(a.getSymbol()) && avgAnnualDiv.get(a.getSymbol()) > 0)
+                .sorted(Comparator.comparingDouble(a -> -avgAnnualDiv.get(a.getSymbol())))
+                .toList();
+
         List<RankingItemDTO> dividendYield = deduplicateByName(
-                analysisMap.values().stream()
-                        .filter(a -> a.getDividendYield() != null
-                                && a.getDividendYield().compareTo(BigDecimal.ZERO) > 0
-                                && a.getDividendYield().compareTo(maxDy) <= 0)
-                        .sorted(Comparator.comparing(TickerAnalysisJpaEntity::getDividendYield).reversed())
-                        .toList(),
+                sortedByAvgDiv,
                 tickerMap,
-                a -> a.getDividendYield().doubleValue()
+                a -> avgAnnualDiv.getOrDefault(a.getSymbol(), 0.0)
         );
 
         List<RankingItemDTO> marketCap = deduplicateByName(
@@ -78,6 +86,29 @@ public class RankingsService {
         );
 
         return new RankingsDTO(dividendYield, marketCap, revenue);
+    }
+
+    private Map<String, Double> computeAvgAnnualDividend() {
+        // sumBySymbolAndYear returns [symbol, year, sum] rows
+        List<Object[]> rows = dividendRepo.sumBySymbolAndYear();
+
+        // Accumulate per (symbol → year → total)
+        Map<String, Map<String, Double>> bySymbolYear = new HashMap<>();
+        for (Object[] row : rows) {
+            String symbol = (String) row[0];
+            String year   = (String) row[1];
+            double total  = ((Number) row[2]).doubleValue();
+            bySymbolYear.computeIfAbsent(symbol, k -> new HashMap<>()).put(year, total);
+        }
+
+        // Average the per-year totals for each symbol
+        Map<String, Double> result = new HashMap<>();
+        for (Map.Entry<String, Map<String, Double>> entry : bySymbolYear.entrySet()) {
+            double avg = entry.getValue().values().stream()
+                    .mapToDouble(Double::doubleValue).average().orElse(0);
+            if (avg > 0) result.put(entry.getKey(), avg);
+        }
+        return result;
     }
 
     private List<RankingItemDTO> deduplicateByName(

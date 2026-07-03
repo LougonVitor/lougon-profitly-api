@@ -13,4 +13,17 @@ public interface JpaDividendEventRepository extends JpaRepository<DividendEventJ
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM DividendEventJpaEntity e WHERE e.symbol = :symbol")
     void deleteBySymbol(@Param("symbol") String symbol);
+
+    // Returns [symbol, year (string), sumRate] grouped by symbol + year extracted from paymentDate
+    @Query(value = """
+            SELECT e.symbol,
+                   SUBSTRING(e.payment_date, 1, 4) AS yr,
+                   SUM(e.rate)                      AS total
+            FROM dividend_events e
+            WHERE e.rate > 0
+              AND e.payment_date IS NOT NULL
+              AND LENGTH(e.payment_date) >= 4
+            GROUP BY e.symbol, SUBSTRING(e.payment_date, 1, 4)
+            """, nativeQuery = true)
+    List<Object[]> sumBySymbolAndYear();
 }
