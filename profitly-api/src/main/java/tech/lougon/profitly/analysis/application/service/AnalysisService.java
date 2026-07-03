@@ -64,26 +64,7 @@ public class AnalysisService {
         }
         var ticker = tickerOpt.get();
 
-        log.info("Syncing analysis + price history for {}", symbol);
-
-        // Fetch and cache price history
-        var bars = brapiClient.fetchHistory(symbol, "max");
-        if (!bars.isEmpty()) {
-            List<PricePoint> points = bars.stream()
-                    .filter(b -> b.date() != null && b.close() != null)
-                    .map(b -> new PricePoint(
-                            symbol,
-                            Instant.ofEpochSecond(b.date()).atZone(ZoneOffset.UTC).toLocalDate(),
-                            b.open() != null ? BigDecimal.valueOf(b.open()) : null,
-                            b.high() != null ? BigDecimal.valueOf(b.high()) : null,
-                            b.low() != null ? BigDecimal.valueOf(b.low()) : null,
-                            BigDecimal.valueOf(b.close()),
-                            b.adjustedClose() != null ? BigDecimal.valueOf(b.adjustedClose()) : null,
-                            b.volume()
-                    ))
-                    .toList();
-            priceHistoryRepository.saveAll(points);
-        }
+        log.info("Syncing analysis for {}", symbol);
 
         var statsData     = brapiClient.fetchStatistics(symbol);
         var financialData = brapiClient.fetchFinancialData(symbol);
@@ -120,6 +101,27 @@ public class AnalysisService {
         return new TickerAnalysis(symbol, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null);
+    }
+
+    public void syncPriceHistory(String symbol) {
+        log.info("Syncing price history for {}", symbol);
+        var bars = brapiClient.fetchHistory(symbol, "max");
+        if (!bars.isEmpty()) {
+            List<PricePoint> points = bars.stream()
+                    .filter(b -> b.date() != null && b.close() != null)
+                    .map(b -> new PricePoint(
+                            symbol,
+                            Instant.ofEpochSecond(b.date()).atZone(ZoneOffset.UTC).toLocalDate(),
+                            b.open() != null ? BigDecimal.valueOf(b.open()) : null,
+                            b.high() != null ? BigDecimal.valueOf(b.high()) : null,
+                            b.low() != null ? BigDecimal.valueOf(b.low()) : null,
+                            BigDecimal.valueOf(b.close()),
+                            b.adjustedClose() != null ? BigDecimal.valueOf(b.adjustedClose()) : null,
+                            b.volume()
+                    ))
+                    .toList();
+            priceHistoryRepository.saveAll(points);
+        }
     }
 
     public List<PricePointDTO> getPriceHistory(String symbol, String range) {
