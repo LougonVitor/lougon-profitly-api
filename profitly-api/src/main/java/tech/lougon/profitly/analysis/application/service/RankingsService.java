@@ -10,7 +10,6 @@ import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepositor
 import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -49,24 +48,20 @@ public class RankingsService {
         // Sanity ceiling: above R$ 2 trillion is a brapi data error.
         long maxMarketCap = 2_000_000_000_000L;
 
-        // Average annual dividend per share: sum dividends per year, average across years.
-        // Minimum 3 years of payment history required to appear.
-        Map<String, Double> avgAnnualDiv = computeAvgAnnualDividend(3);
-
-        // Build a synthetic list sorted by avgAnnualDiv for deduplication
-        List<TickerAnalysisJpaEntity> sortedByAvgDiv = analysisMap.values().stream()
-                .filter(a -> avgAnnualDiv.containsKey(a.getSymbol())
-                        && avgAnnualDiv.get(a.getSymbol()) > 0
-                        && a.getMarketCap() != null
-                        && a.getMarketCap() >= minMarketCap
-                        && a.getMarketCap() <= maxMarketCap)
-                .sorted(Comparator.comparingDouble(a -> -avgAnnualDiv.get(a.getSymbol())))
-                .toList();
+        // Dividend ranking: average DY% over available years from dividend_events history.
+        // Minimum 3 years of payment history required; displayed as a percentage like the analysis page.
+        Map<String, Double> avgDyBySymbol = computeAvgDividendYield(analysisMap, 3);
 
         List<RankingItemDTO> dividendYield = deduplicateByName(
-                sortedByAvgDiv,
+                analysisMap.values().stream()
+                        .filter(a -> avgDyBySymbol.containsKey(a.getSymbol())
+                                && a.getMarketCap() != null
+                                && a.getMarketCap() >= minMarketCap
+                                && a.getMarketCap() <= maxMarketCap)
+                        .sorted(Comparator.comparingDouble(a -> -avgDyBySymbol.get(a.getSymbol())))
+                        .toList(),
                 tickerMap,
-                a -> avgAnnualDiv.getOrDefault(a.getSymbol(), 0.0)
+                a -> avgDyBySymbol.get(a.getSymbol())
         );
 
         List<RankingItemDTO> marketCap = deduplicateByName(
@@ -98,27 +93,30 @@ public class RankingsService {
         return new RankingsDTO(dividendYield, marketCap, revenue);
     }
 
-    private Map<String, Double> computeAvgAnnualDividend(int minYears) {
-        // sumBySymbolAndYear returns [symbol, year, sum] rows
-        List<Object[]> rows = dividendRepo.sumBySymbolAndYear();
+    /**
+     * Returns a map of symbol → dividendYield value (from ticker_analysis) for symbols
+     * that have at least minYears distinct years of dividend payments in dividend_events.
+     * This filters out one-off payers while displaying the DY% the analysis page shows.
+     */
+    private Map<String, Double> computeAvgDividendYield(
+            Map<String, TickerAnalysisJpaEntity> analysisMap, int minYears) {
 
-        // Accumulate per (symbol → year → total)
-        Map<String, Map<String, Double>> bySymbolYear = new HashMap<>();
+        // Count distinct years per symbol from dividend_events
+        List<Object[]> rows = dividendRepo.sumBySymbolAndYear();
+        Map<String, Long> yearCountBySymbol = new HashMap<>();
         for (Object[] row : rows) {
             String symbol = (String) row[0];
-            String year   = (String) row[1];
-            double total  = ((Number) row[2]).doubleValue();
-            bySymbolYear.computeIfAbsent(symbol, k -> new HashMap<>()).put(year, total);
+            yearCountBySymbol.merge(symbol, 1L, Long::sum);
         }
 
-        // Average the per-year totals; require at least minYears of history
+        // Keep only symbols with enough history and a valid DY
         Map<String, Double> result = new HashMap<>();
-        for (Map.Entry<String, Map<String, Double>> entry : bySymbolYear.entrySet()) {
-            Map<String, Double> yearTotals = entry.getValue();
-            if (yearTotals.size() < minYears) continue;
-            double avg = yearTotals.values().stream()
-                    .mapToDouble(Double::doubleValue).average().orElse(0);
-            if (avg > 0) result.put(entry.getKey(), avg);
+        for (Map.Entry<String, Long> entry : yearCountBySymbol.entrySet()) {
+            if (entry.getValue() < minYears) continue;
+            TickerAnalysisJpaEntity analysis = analysisMap.get(entry.getKey());
+            if (analysis == null || analysis.getDividendYield() == null) continue;
+            double dy = analysis.getDividendYield().doubleValue();
+            if (dy > 0) result.put(entry.getKey(), dy);
         }
         return result;
     }
