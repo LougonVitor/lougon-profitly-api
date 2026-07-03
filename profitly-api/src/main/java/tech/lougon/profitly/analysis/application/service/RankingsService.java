@@ -38,9 +38,16 @@ public class RankingsService {
                 .filter(a -> tickerMap.containsKey(a.getSymbol()))
                 .collect(Collectors.toMap(TickerAnalysisJpaEntity::getSymbol, a -> a, (a, b) -> a));
 
+        // Max realistic DY for Brazilian stocks: 50%. Above that is a brapi data error.
+        BigDecimal maxDy = new BigDecimal("50");
+        // Max realistic market cap: R$ 2 trillion. Above that is a brapi data error.
+        long maxMarketCap = 2_000_000_000_000L;
+
         List<RankingItemDTO> dividendYield = deduplicateByName(
                 analysisMap.values().stream()
-                        .filter(a -> a.getDividendYield() != null && a.getDividendYield().compareTo(BigDecimal.ZERO) > 0)
+                        .filter(a -> a.getDividendYield() != null
+                                && a.getDividendYield().compareTo(BigDecimal.ZERO) > 0
+                                && a.getDividendYield().compareTo(maxDy) <= 0)
                         .sorted(Comparator.comparing(TickerAnalysisJpaEntity::getDividendYield).reversed())
                         .toList(),
                 tickerMap,
@@ -49,7 +56,9 @@ public class RankingsService {
 
         List<RankingItemDTO> marketCap = deduplicateByName(
                 analysisMap.values().stream()
-                        .filter(a -> a.getMarketCap() != null && a.getMarketCap() > 0)
+                        .filter(a -> a.getMarketCap() != null
+                                && a.getMarketCap() > 0
+                                && a.getMarketCap() <= maxMarketCap)
                         .sorted(Comparator.comparingLong(TickerAnalysisJpaEntity::getMarketCap).reversed())
                         .toList(),
                 tickerMap,
