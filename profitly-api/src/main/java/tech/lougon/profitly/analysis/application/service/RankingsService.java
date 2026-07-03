@@ -39,8 +39,7 @@ public class RankingsService {
         Map<String, TickerJpaEntity> tickerMap = tickers.stream()
                 .collect(Collectors.toMap(TickerJpaEntity::getSymbol, t -> t, (a, b) -> a));
 
-        Map<String, TickerAnalysisJpaEntity> analysisMap = analysisRepo.findAll().stream()
-                .filter(a -> tickerMap.containsKey(a.getSymbol()))
+        Map<String, TickerAnalysisJpaEntity> analysisMap = analysisRepo.findBySymbolIn(tickerMap.keySet()).stream()
                 .collect(Collectors.toMap(TickerAnalysisJpaEntity::getSymbol, a -> a, (a, b) -> a));
 
         // Liquidity floor: ignore micro-caps with no real market presence.

@@ -42,6 +42,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/analysis/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/tickers/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/news/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/rankings/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/ibovespa/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class)
