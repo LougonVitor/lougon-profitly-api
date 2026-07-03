@@ -24,14 +24,12 @@ public class IbovespaService {
 
     private final BrapiAnalysisClient client;
     private final JpaIbovespaCacheRepository cacheRepository;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public IbovespaService(BrapiAnalysisClient client,
-                           JpaIbovespaCacheRepository cacheRepository,
-                           ObjectMapper objectMapper) {
+                           JpaIbovespaCacheRepository cacheRepository) {
         this.client = client;
         this.cacheRepository = cacheRepository;
-        this.objectMapper = objectMapper;
     }
 
     public IbovespaResponse fetch(String range) {
