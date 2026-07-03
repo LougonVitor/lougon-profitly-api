@@ -7,7 +7,9 @@ import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.mapper.AnalysisMapper;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -37,5 +39,21 @@ public class PriceHistoryRepositoryImpl implements PriceHistoryRepository {
     public void saveAll(List<PricePoint> points) {
         List<PricePointJpaEntity> entities = points.stream().map(mapper::toEntity).toList();
         jpa.saveAll(entities);
+    }
+
+    @Override
+    public Map<Integer, Double> avgAnnualCloseBySymbol(String symbol) {
+        Map<Integer, Double> result = new HashMap<>();
+        for (Object[] row : jpa.avgAnnualCloseBySymbol(symbol)) {
+            int year = ((Number) row[0]).intValue();
+            double avg = ((Number) row[1]).doubleValue();
+            result.put(year, avg);
+        }
+        return result;
+    }
+
+    @Override
+    public List<String> findSymbolsWithDividendsButNoPriceHistory() {
+        return jpa.findSymbolsWithDividendsButNoPriceHistory();
     }
 }

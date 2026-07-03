@@ -20,7 +20,10 @@ import tech.lougon.profitly.ticker.application.service.TickerService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.*;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class AnalysisService {
@@ -52,8 +55,9 @@ public class AnalysisService {
         TickerAnalysis stats = analysisRepository.findBySymbol(symbol)
                 .orElseGet(() -> emptyAnalysis(symbol));
         List<DividendEvent> dividends = dividendRepository.findBySymbol(symbol);
+        Map<Integer, Double> historicalDy = computeHistoricalDyByYear(symbol, dividends);
 
-        return TickerAnalysisDTO.of(ticker, stats, dividends);
+        return TickerAnalysisDTO.of(ticker, stats, dividends, historicalDy);
     }
 
     public void forceSync(String symbol) {
@@ -185,6 +189,39 @@ public class AnalysisService {
                 Instant.now(), null
         );
         return analysisRepository.save(analysis);
+    }
+
+    /**
+     * Computes annual DY% using actual historical prices from price_history.
+     * For each calendar year: DY = sum(dividends in year) / avg(close in year) × 100.
+     * Years without price data in DB are omitted from the result.
+     */
+    private Map<Integer, Double> computeHistoricalDyByYear(String symbol, List<DividendEvent> dividends) {
+        if (dividends.isEmpty()) return Map.of();
+
+        // Sum dividend rates per calendar year
+        Map<Integer, Double> sumByYear = new HashMap<>();
+        for (DividendEvent d : dividends) {
+            if (d.rate() == null || d.rate() <= 0 || d.lastDatePrior() == null) continue;
+            try {
+                int year = Integer.parseInt(d.lastDatePrior().substring(0, 4));
+                sumByYear.merge(year, d.rate(), Double::sum);
+            } catch (NumberFormatException ignored) {}
+        }
+        if (sumByYear.isEmpty()) return Map.of();
+
+        // Get average annual close price from price_history
+        Map<Integer, Double> avgPriceByYear = priceHistoryRepository.avgAnnualCloseBySymbol(symbol);
+
+        // DY% = sumDividends / avgPrice × 100, only for years with price data
+        Map<Integer, Double> result = new HashMap<>();
+        for (Map.Entry<Integer, Double> entry : sumByYear.entrySet()) {
+            Double avgPrice = avgPriceByYear.get(entry.getKey());
+            if (avgPrice != null && avgPrice > 0) {
+                result.put(entry.getKey(), (entry.getValue() / avgPrice) * 100.0);
+            }
+        }
+        return result;
     }
 
     private LocalDate resolveFromDate(String range) {

@@ -6,9 +6,13 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.application.service.AnalysisService;
+import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
 import tech.lougon.profitly.wallet.infrastructure.persistence.JpaWalletPositionRepository;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.SequencedSet;
 
 @Component
 public class PriceHistorySyncScheduler {
@@ -18,25 +22,46 @@ public class PriceHistorySyncScheduler {
 
     private final AnalysisService analysisService;
     private final JpaWalletPositionRepository positionRepository;
+    private final PriceHistoryRepository priceHistoryRepository;
 
     public PriceHistorySyncScheduler(AnalysisService analysisService,
-                                     JpaWalletPositionRepository positionRepository) {
+                                     JpaWalletPositionRepository positionRepository,
+                                     PriceHistoryRepository priceHistoryRepository) {
         this.analysisService = analysisService;
         this.positionRepository = positionRepository;
+        this.priceHistoryRepository = priceHistoryRepository;
     }
 
-    // Runs at 19:00 daily — after ticker sync, before analysis sync
+    // Runs at 19:02 daily — syncs portfolio tickers (keep price chart up-to-date)
     @Scheduled(cron = "0 2 19 * * *", zone = "America/Sao_Paulo")
     public void scheduledSync() {
         log.info("Daily price history sync triggered");
         syncAsync();
     }
 
+    // Runs at 02:30 nightly — fills gaps for tickers with dividends but no price history
+    // This enables accurate historical DY% on the analysis page without any live brapi call per user
+    @Scheduled(cron = "0 30 2 * * *", zone = "America/Sao_Paulo")
+    public void scheduledDividendTickerSync() {
+        log.info("Nightly dividend-ticker price history backfill triggered");
+        syncDividendTickersAsync();
+    }
+
     @Async
     public void syncAsync() {
         List<String> symbols = positionRepository.findDistinctTickers();
         log.info("Starting price history sync for {} portfolio tickers", symbols.size());
+        runSync(symbols);
+    }
 
+    @Async
+    public void syncDividendTickersAsync() {
+        List<String> missing = priceHistoryRepository.findSymbolsWithDividendsButNoPriceHistory();
+        log.info("Starting price history backfill for {} dividend tickers without history", missing.size());
+        runSync(missing);
+    }
+
+    private void runSync(List<String> symbols) {
         int success = 0, failed = 0;
         for (String symbol : symbols) {
             try {
@@ -51,7 +76,6 @@ public class PriceHistorySyncScheduler {
                 failed++;
             }
         }
-
         log.info("Price history sync complete — {} ok, {} failed", success, failed);
     }
 }

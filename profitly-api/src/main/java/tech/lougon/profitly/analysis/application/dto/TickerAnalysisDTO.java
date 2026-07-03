@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public record TickerAnalysisDTO(
         // From Ticker entity (basic info)
@@ -43,12 +44,16 @@ public record TickerAnalysisDTO(
         // Historical dividends
         List<DividendEvent> dividends,
 
+        // Annual DY% computed from price_history (year → DY%). Null years have no price data.
+        Map<Integer, Double> historicalDyByYear,
+
         // Cache metadata
         Instant syncedAt
 ) {
     public static TickerAnalysisDTO of(TickerDTO ticker,
                                        tech.lougon.profitly.analysis.domain.model.TickerAnalysis stats,
-                                       List<DividendEvent> dividends) {
+                                       List<DividendEvent> dividends,
+                                       Map<Integer, Double> historicalDyByYear) {
         BigDecimal eps = stats.earningsPerShare();
         BigDecimal price = ticker.lastPrice();
 
@@ -68,7 +73,7 @@ public record TickerAnalysisDTO(
                 stats.enterpriseValue(),
                 stats.bookValue(), stats.weekChange52(), stats.profitMargins(),
                 stats.sharesOutstanding(), stats.lastDividendValue(), stats.lastDividendDate(),
-                dividends, stats.syncedAt()
+                dividends, historicalDyByYear, stats.syncedAt()
         );
     }
 }
