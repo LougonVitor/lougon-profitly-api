@@ -21,7 +21,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.*;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class AnalysisService {
@@ -65,7 +64,27 @@ public class AnalysisService {
         }
         var ticker = tickerOpt.get();
 
-        log.info("Syncing analysis for {}", symbol);
+        log.info("Syncing analysis + price history for {}", symbol);
+
+        // Fetch and cache price history
+        var bars = brapiClient.fetchHistory(symbol, "max");
+        if (!bars.isEmpty()) {
+            List<PricePoint> points = bars.stream()
+                    .filter(b -> b.date() != null && b.close() != null)
+                    .map(b -> new PricePoint(
+                            symbol,
+                            Instant.ofEpochSecond(b.date()).atZone(ZoneOffset.UTC).toLocalDate(),
+                            b.open() != null ? BigDecimal.valueOf(b.open()) : null,
+                            b.high() != null ? BigDecimal.valueOf(b.high()) : null,
+                            b.low() != null ? BigDecimal.valueOf(b.low()) : null,
+                            BigDecimal.valueOf(b.close()),
+                            b.adjustedClose() != null ? BigDecimal.valueOf(b.adjustedClose()) : null,
+                            b.volume()
+                    ))
+                    .toList();
+            priceHistoryRepository.saveAll(points);
+        }
+
         var statsData     = brapiClient.fetchStatistics(symbol);
         var financialData = brapiClient.fetchFinancialData(symbol);
         TickerAnalysis stats = buildAndSave(symbol, statsData.orElse(null), financialData.orElse(null));
@@ -106,31 +125,6 @@ public class AnalysisService {
     public List<PricePointDTO> getPriceHistory(String symbol, String range) {
         LocalDate from = resolveFromDate(range);
         LocalDate to = LocalDate.now();
-
-        Optional<LocalDate> latestInDb = priceHistoryRepository.findLatestDateBySymbol(symbol);
-        boolean needsFetch = latestInDb.isEmpty() || latestInDb.get().isBefore(to.minusDays(1));
-
-        if (needsFetch) {
-            log.info("Fetching price history for {} range={}", symbol, range);
-            var bars = brapiClient.fetchHistory(symbol, "max");
-            if (!bars.isEmpty()) {
-                List<PricePoint> points = bars.stream()
-                        .filter(b -> b.date() != null && b.close() != null)
-                        .map(b -> new PricePoint(
-                                symbol,
-                                Instant.ofEpochSecond(b.date()).atZone(ZoneOffset.UTC).toLocalDate(),
-                                b.open() != null ? BigDecimal.valueOf(b.open()) : null,
-                                b.high() != null ? BigDecimal.valueOf(b.high()) : null,
-                                b.low() != null ? BigDecimal.valueOf(b.low()) : null,
-                                BigDecimal.valueOf(b.close()),
-                                b.adjustedClose() != null ? BigDecimal.valueOf(b.adjustedClose()) : null,
-                                b.volume()
-                        ))
-                        .toList();
-                priceHistoryRepository.saveAll(points);
-            }
-        }
-
         return priceHistoryRepository.findBySymbolAndDateBetween(symbol, from, to)
                 .stream().map(PricePointDTO::from).toList();
     }
