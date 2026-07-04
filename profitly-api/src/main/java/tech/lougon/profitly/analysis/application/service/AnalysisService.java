@@ -76,12 +76,19 @@ public class AnalysisService {
 
         boolean isFii = "FII".equalsIgnoreCase(ticker.assetType())
                 || "FII".equalsIgnoreCase(ticker.subType());
-        var raw = isFii ? brapiClient.fetchFiiDividends(symbol) : brapiClient.fetchDividends(symbol);
 
-        List<DividendEvent> events = raw.stream()
-                .map(d -> new DividendEvent(symbol, d.assetIssued(), d.paymentDate(), d.rate(),
-                        d.relatedTo(), d.approvedOn(), d.label(), d.lastDatePrior(), d.remarks()))
-                .toList();
+        List<DividendEvent> events;
+        if (isFii) {
+            events = brapiClient.fetchFiiDividends(symbol).stream()
+                    .map(d -> new DividendEvent(symbol, null, d.paymentDate(), d.rate(),
+                            d.relatedTo(), d.approvedOn(), d.label(), d.lastDatePrior(), d.remarks()))
+                    .toList();
+        } else {
+            events = brapiClient.fetchDividends(symbol).stream()
+                    .map(d -> new DividendEvent(symbol, d.assetIssued(), d.paymentDate(), d.rate(),
+                            d.relatedTo(), d.approvedOn(), d.label(), d.lastDatePrior(), d.remarks()))
+                    .toList();
+        }
 
         try {
             dividendRepository.replaceAll(symbol, events);
