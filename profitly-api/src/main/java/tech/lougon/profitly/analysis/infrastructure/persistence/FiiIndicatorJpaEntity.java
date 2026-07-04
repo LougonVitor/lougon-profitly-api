@@ -47,6 +47,21 @@ public class FiiIndicatorJpaEntity {
     @Column(name = "segment_type", length = 30)
     private String segmentType;
 
+    @Column(name = "name")
+    private String name;
+
+    @Column(name = "cnpj", length = 20)
+    private String cnpj;
+
+    @Column(name = "mandate", length = 60)
+    private String mandate;
+
+    @Column(name = "segmento_atuacao", length = 60)
+    private String segmentoAtuacao;
+
+    @Column(name = "tipo_gestao", length = 30)
+    private String tipoGestao;
+
     @Column(name = "admin_name")
     private String adminName;
 
@@ -84,6 +99,16 @@ public class FiiIndicatorJpaEntity {
     public void setTotalAssets(Double v) { this.totalAssets = v; }
     public String getSegmentType() { return segmentType; }
     public void setSegmentType(String v) { this.segmentType = v; }
+    public String getName() { return name; }
+    public void setName(String v) { this.name = v; }
+    public String getCnpj() { return cnpj; }
+    public void setCnpj(String v) { this.cnpj = v; }
+    public String getMandate() { return mandate; }
+    public void setMandate(String v) { this.mandate = v; }
+    public String getSegmentoAtuacao() { return segmentoAtuacao; }
+    public void setSegmentoAtuacao(String v) { this.segmentoAtuacao = v; }
+    public String getTipoGestao() { return tipoGestao; }
+    public void setTipoGestao(String v) { this.tipoGestao = v; }
     public String getAdminName() { return adminName; }
     public void setAdminName(String v) { this.adminName = v; }
     public String getAdminCnpj() { return adminCnpj; }

@@ -150,11 +150,16 @@ public class BrapiAnalysisClient {
         }
     }
 
-    /** Fetches all FIIs from /api/v2/fii/list (no symbols filter — returns everything brapi has). */
+    /**
+     * Fetches all FIIs from /api/v2/fii/list in a single request.
+     * The endpoint defaults to 20 items per page but accepts arbitrarily high limits.
+     */
     public List<BrapiFiiListResponse.FiiListItem> fetchFiiList() {
         try {
             BrapiFiiListResponse response = webClient.get()
-                    .uri("/api/v2/fii/list")
+                    .uri(u -> u.path("/api/v2/fii/list")
+                            .queryParam("limit", 10000)
+                            .build())
                     .retrieve()
                     .bodyToMono(BrapiFiiListResponse.class)
                     .block();

@@ -86,26 +86,6 @@ public class FiiIndicatorSyncScheduler {
             }
         }
 
-        log.info("FII indicators synced: {}/{} — syncing history, dividends, prices", synced.size(), allFiis.size());
-
-        for (String symbol : synced) {
-            try {
-                syncHistory(symbol);
-            } catch (Exception e) {
-                log.warn("FII indicator history sync failed for {}: {}", symbol, e.getMessage());
-            }
-            try {
-                syncDividends(symbol);
-            } catch (Exception e) {
-                log.warn("FII dividend sync failed for {}: {}", symbol, e.getMessage());
-            }
-            try {
-                analysisService.syncPriceHistory(symbol);
-            } catch (Exception e) {
-                log.warn("FII price history sync failed for {}: {}", symbol, e.getMessage());
-            }
-        }
-
         log.info("FII sync complete: {}/{} tickers synced", synced.size(), allFiis.size());
     }
 
@@ -131,6 +111,11 @@ public class FiiIndicatorSyncScheduler {
         FiiIndicatorJpaEntity entity = indicatorRepo.findById(item.symbol())
                 .orElseGet(() -> { var e = new FiiIndicatorJpaEntity(); e.setSymbol(item.symbol()); return e; });
 
+        entity.setName(item.name());
+        entity.setCnpj(item.cnpj());
+        entity.setMandate(item.mandate());
+        entity.setSegmentoAtuacao(item.segmentoAtuacao());
+        entity.setTipoGestao(item.tipoGestao());
         entity.setPrice(item.price());
         entity.setNavPerShare(item.navPerShare());
         entity.setPriceToNav(item.priceToNav());
