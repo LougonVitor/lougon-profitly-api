@@ -14,6 +14,8 @@ public interface PriceHistoryRepository {
     void saveAll(List<PricePoint> points);
     /** Returns year → average close price for the given symbol. */
     Map<Integer, Double> avgAnnualCloseBySymbol(String symbol);
+    /** Returns year → close of the last trading day of that year for the given symbol. */
+    Map<Integer, Double> endOfYearCloseBySymbol(String symbol);
     /** Symbols that have dividend history in DB but no price history at all. */
     List<String> findSymbolsWithDividendsButNoPriceHistory();
 }

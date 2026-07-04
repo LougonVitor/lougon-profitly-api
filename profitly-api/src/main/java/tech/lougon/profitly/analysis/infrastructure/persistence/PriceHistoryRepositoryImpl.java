@@ -53,6 +53,15 @@ public class PriceHistoryRepositoryImpl implements PriceHistoryRepository {
     }
 
     @Override
+    public Map<Integer, Double> endOfYearCloseBySymbol(String symbol) {
+        Map<Integer, Double> result = new HashMap<>();
+        for (Object[] row : jpa.endOfYearCloseBySymbol(symbol)) {
+            result.put(((Number) row[0]).intValue(), ((Number) row[1]).doubleValue());
+        }
+        return result;
+    }
+
+    @Override
     public List<String> findSymbolsWithDividendsButNoPriceHistory() {
         return jpa.findSymbolsWithDividendsButNoPriceHistory();
     }

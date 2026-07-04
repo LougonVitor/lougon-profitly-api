@@ -35,17 +35,20 @@ public class AnalysisService {
     private final PriceHistoryRepository priceHistoryRepository;
     private final DividendRepository dividendRepository;
     private final BrapiAnalysisClient brapiClient;
+    private final tech.lougon.profitly.analysis.infrastructure.persistence.JpaStockSplitEventRepository splitRepo;
 
     public AnalysisService(TickerService tickerService,
                            TickerAnalysisRepository analysisRepository,
                            PriceHistoryRepository priceHistoryRepository,
                            DividendRepository dividendRepository,
-                           BrapiAnalysisClient brapiClient) {
+                           BrapiAnalysisClient brapiClient,
+                           tech.lougon.profitly.analysis.infrastructure.persistence.JpaStockSplitEventRepository splitRepo) {
         this.tickerService = tickerService;
         this.analysisRepository = analysisRepository;
         this.priceHistoryRepository = priceHistoryRepository;
         this.dividendRepository = dividendRepository;
         this.brapiClient = brapiClient;
+        this.splitRepo = splitRepo;
     }
 
     public TickerAnalysisDTO getAnalysis(String symbol) {
@@ -233,34 +236,59 @@ public class AnalysisService {
         return analysisRepository.save(analysis);
     }
 
+    /** DY history window in years (limits storage and matches Investidor10 charts). */
+    private static final int DY_HISTORY_YEARS = 20;
+
     /**
-     * Computes annual DY% using actual historical prices from price_history.
-     * For each calendar year: DY = sum(dividends in year) / avg(close in year) × 100.
+     * Computes annual DY% on the split-adjusted basis, matching Investidor10:
+     * DY(year) = sum(split-adjusted dividends with ex-date in year) / close of the LAST
+     * trading day of that year × 100.
+     *
+     * price_points closes are split-adjusted retroactively (Yahoo convention), while
+     * dividend rates are as-paid — so each rate is divided by the cumulative factor of
+     * all splits that happened AFTER its ex-date to put both on the same basis.
      * Years without price data in DB are omitted from the result.
      */
     private Map<Integer, Double> computeHistoricalDyByYear(String symbol, List<DividendEvent> dividends) {
         if (dividends.isEmpty()) return Map.of();
 
-        // Sum dividend rates per calendar year
+        int minYear = LocalDate.now().getYear() - DY_HISTORY_YEARS;
+
+        var splits = splitRepo.findBySymbol(symbol).stream()
+                .filter(s -> s.getFactor() != null && s.getFactor() > 0
+                        && s.getLastDatePrior() != null && s.getLastDatePrior().length() >= 10)
+                .toList();
+
+        // Sum split-adjusted dividend rates per calendar year (by ex-date)
         Map<Integer, Double> sumByYear = new HashMap<>();
         for (DividendEvent d : dividends) {
-            if (d.rate() == null || d.rate() <= 0 || d.lastDatePrior() == null) continue;
+            if (d.rate() == null || d.rate() <= 0
+                    || d.lastDatePrior() == null || d.lastDatePrior().length() < 10) continue;
+            String exDate = d.lastDatePrior().substring(0, 10);
+            int year;
             try {
-                int year = Integer.parseInt(d.lastDatePrior().substring(0, 4));
-                sumByYear.merge(year, d.rate(), Double::sum);
-            } catch (NumberFormatException ignored) {}
+                year = Integer.parseInt(exDate.substring(0, 4));
+            } catch (NumberFormatException e) { continue; }
+            if (year < minYear) continue;
+
+            double cumFactor = 1.0;
+            for (var s : splits) {
+                if (s.getLastDatePrior().substring(0, 10).compareTo(exDate) > 0) {
+                    cumFactor *= s.getFactor();
+                }
+            }
+            sumByYear.merge(year, d.rate() / cumFactor, Double::sum);
         }
         if (sumByYear.isEmpty()) return Map.of();
 
-        // Get average annual close price from price_history
-        Map<Integer, Double> avgPriceByYear = priceHistoryRepository.avgAnnualCloseBySymbol(symbol);
+        // Close of the last trading day of each year (same adjusted basis as the rates above)
+        Map<Integer, Double> closeByYear = priceHistoryRepository.endOfYearCloseBySymbol(symbol);
 
-        // DY% = sumDividends / avgPrice × 100, only for years with price data
         Map<Integer, Double> result = new HashMap<>();
         for (Map.Entry<Integer, Double> entry : sumByYear.entrySet()) {
-            Double avgPrice = avgPriceByYear.get(entry.getKey());
-            if (avgPrice != null && avgPrice > 0) {
-                result.put(entry.getKey(), (entry.getValue() / avgPrice) * 100.0);
+            Double close = closeByYear.get(entry.getKey());
+            if (close != null && close > 0) {
+                result.put(entry.getKey(), (entry.getValue() / close) * 100.0);
             }
         }
         return result;

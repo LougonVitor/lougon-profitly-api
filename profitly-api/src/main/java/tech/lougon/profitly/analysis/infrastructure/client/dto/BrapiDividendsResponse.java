@@ -17,7 +17,21 @@ public record BrapiDividendsResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Data(
-            @JsonProperty("cashDividends") List<CashDividend> cashDividends
+            @JsonProperty("cashDividends") List<CashDividend> cashDividends,
+            @JsonProperty("stockDividends") List<StockDividend> stockDividends
+    ) {}
+
+    /** Splits, reverse splits and bonus issues — needed to adjust dividend rates for DY. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record StockDividend(
+            @JsonProperty("assetIssued")    String assetIssued,
+            @JsonProperty("factor")         Double factor,
+            @JsonProperty("completeFactor") String completeFactor,
+            @JsonProperty("approvedOn")     String approvedOn,
+            @JsonProperty("isinCode")       String isinCode,
+            @JsonProperty("label")          String label,
+            @JsonProperty("lastDatePrior")  String lastDatePrior,
+            @JsonProperty("remarks")        String remarks
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)

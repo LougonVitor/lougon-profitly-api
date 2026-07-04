@@ -51,6 +51,7 @@ public class StockAnalysisSyncScheduler {
     private final JpaStockProfileRepository profileRepo;
     private final JpaStockFinancialsRepository financialsRepo;
     private final JpaStockStatementRepository statementRepo;
+    private final JpaStockSplitEventRepository splitRepo;
     private final DividendRepository dividendRepository;
     private final BrapiAnalysisClient brapiClient;
     private final AnalysisService analysisService;
@@ -60,6 +61,7 @@ public class StockAnalysisSyncScheduler {
                                       JpaStockProfileRepository profileRepo,
                                       JpaStockFinancialsRepository financialsRepo,
                                       JpaStockStatementRepository statementRepo,
+                                      JpaStockSplitEventRepository splitRepo,
                                       DividendRepository dividendRepository,
                                       BrapiAnalysisClient brapiClient,
                                       AnalysisService analysisService) {
@@ -68,6 +70,7 @@ public class StockAnalysisSyncScheduler {
         this.profileRepo = profileRepo;
         this.financialsRepo = financialsRepo;
         this.statementRepo = statementRepo;
+        this.splitRepo = splitRepo;
         this.dividendRepository = dividendRepository;
         this.brapiClient = brapiClient;
         this.analysisService = analysisService;
@@ -240,15 +243,43 @@ public class StockAnalysisSyncScheduler {
 
     private void syncDividends(String symbols) {
         for (BrapiDividendsResponse.Result r : brapiClient.fetchDividendsBatch(symbols)) {
-            if (r.data().cashDividends() == null || r.data().cashDividends().isEmpty()) continue;
+            if (r.data().cashDividends() != null && !r.data().cashDividends().isEmpty()) {
+                try {
+                    List<DividendEvent> events = r.data().cashDividends().stream()
+                            .map(d -> new DividendEvent(r.symbol(), d.assetIssued(), d.paymentDate(), d.rate(),
+                                    d.relatedTo(), d.approvedOn(), d.label(), d.lastDatePrior(), d.remarks()))
+                            .toList();
+                    dividendRepository.replaceAll(r.symbol(), events);
+                } catch (Exception ex) {
+                    log.warn("Failed to save dividends for {}: {}", r.symbol(), ex.getMessage());
+                }
+            }
+            saveSplits(r.symbol(), r.data().stockDividends());
+        }
+    }
+
+    /** Splits/bonuses are needed to put as-paid dividends on the same basis as adjusted prices. */
+    private void saveSplits(String symbol, List<BrapiDividendsResponse.StockDividend> splits) {
+        if (splits == null) return;
+        for (BrapiDividendsResponse.StockDividend s : splits) {
+            if (s == null || s.factor() == null || s.lastDatePrior() == null) continue;
             try {
-                List<DividendEvent> events = r.data().cashDividends().stream()
-                        .map(d -> new DividendEvent(r.symbol(), d.assetIssued(), d.paymentDate(), d.rate(),
-                                d.relatedTo(), d.approvedOn(), d.label(), d.lastDatePrior(), d.remarks()))
-                        .toList();
-                dividendRepository.replaceAll(r.symbol(), events);
+                StockSplitEventJpaEntity e = splitRepo
+                        .findBySymbolAndLastDatePriorAndLabel(symbol, s.lastDatePrior(), s.label())
+                        .orElseGet(() -> {
+                            var n = new StockSplitEventJpaEntity();
+                            n.setSymbol(symbol);
+                            n.setLastDatePrior(s.lastDatePrior());
+                            n.setLabel(s.label());
+                            return n;
+                        });
+                e.setFactor(s.factor());
+                e.setCompleteFactor(s.completeFactor());
+                e.setApprovedOn(s.approvedOn());
+                e.setSyncedAt(Instant.now());
+                splitRepo.save(e);
             } catch (Exception ex) {
-                log.warn("Failed to save dividends for {}: {}", r.symbol(), ex.getMessage());
+                log.warn("Failed to save split event for {}: {}", symbol, ex.getMessage());
             }
         }
     }

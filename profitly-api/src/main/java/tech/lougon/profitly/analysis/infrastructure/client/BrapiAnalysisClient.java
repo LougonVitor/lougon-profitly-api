@@ -422,7 +422,7 @@ public class BrapiAnalysisClient {
                                 null, d.paymentDate(), d.rate(), d.relatedTo(),
                                 d.approvedOn(), d.isinCode(), d.label(), d.lastDatePrior(), d.remarks()))
                         .toList();
-                return List.of(new BrapiDividendsResponse.Result(symbols, new BrapiDividendsResponse.Data(cash)));
+                return List.of(new BrapiDividendsResponse.Result(symbols, new BrapiDividendsResponse.Data(cash, List.of())));
             }
             log.warn("Failed to fetch dividends for [{}]: {}", symbols, e.getMessage());
             return List.of();

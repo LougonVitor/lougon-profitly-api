@@ -25,6 +25,15 @@ public interface JpaPricePointRepository extends JpaRepository<PricePointJpaEnti
             """, nativeQuery = true)
     List<Object[]> avgAnnualCloseBySymbol(@Param("symbol") String symbol);
 
+    // Returns [year (int), close of the LAST trading day of that year] for a given symbol
+    @Query(value = """
+            SELECT DISTINCT ON (EXTRACT(YEAR FROM p.date)) EXTRACT(YEAR FROM p.date) AS yr, p.close
+            FROM price_points p
+            WHERE p.symbol = :symbol
+            ORDER BY EXTRACT(YEAR FROM p.date), p.date DESC
+            """, nativeQuery = true)
+    List<Object[]> endOfYearCloseBySymbol(@Param("symbol") String symbol);
+
     // Symbols that have dividend_events but no price_points at all
     @Query(value = """
             SELECT DISTINCT d.symbol
