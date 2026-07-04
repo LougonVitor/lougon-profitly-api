@@ -1,6 +1,6 @@
 package tech.lougon.profitly.analysis.infrastructure.scheduler;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -37,6 +37,7 @@ public class StockAnalysisSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(StockAnalysisSyncScheduler.class);
     private static final int BATCH_SIZE = 20;
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final Map<String, String> STATEMENT_ENDPOINTS = Map.of(
             "balance-sheet", "balance_sheet",
@@ -255,10 +256,10 @@ public class StockAnalysisSyncScheduler {
     private void syncStatements(String endpoint, String symbols) {
         String statementType = STATEMENT_ENDPOINTS.get(endpoint);
         for (BrapiStockStatementsResponse.Result r : brapiClient.fetchStatements(endpoint, symbols)) {
-            for (JsonNode row : r.data()) {
-                if (row == null || !row.hasNonNull("endDate")) continue;
-                String endDate = row.get("endDate").asText();
-                String periodType = row.hasNonNull("type") ? row.get("type").asText() : "yearly";
+            for (Map<String, Object> row : r.data()) {
+                if (row == null || row.get("endDate") == null) continue;
+                String endDate = String.valueOf(row.get("endDate"));
+                String periodType = row.get("type") != null ? String.valueOf(row.get("type")) : "yearly";
                 try {
                     StockStatementJpaEntity e = statementRepo
                             .findBySymbolAndStatementTypeAndPeriodTypeAndEndDate(r.symbol(), statementType, periodType, endDate)
@@ -270,7 +271,7 @@ public class StockAnalysisSyncScheduler {
                                 s.setEndDate(endDate);
                                 return s;
                             });
-                    e.setRawJson(row.toString());
+                    e.setRawJson(JSON.writeValueAsString(row));
                     e.setSyncedAt(Instant.now());
                     statementRepo.save(e);
                 } catch (Exception ex) {

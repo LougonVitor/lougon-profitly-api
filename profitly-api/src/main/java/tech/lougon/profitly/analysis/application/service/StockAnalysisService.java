@@ -1,6 +1,6 @@
 package tech.lougon.profitly.analysis.application.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,11 +65,11 @@ public class StockAnalysisService {
     }
 
     /** Statement rows parsed back to structured JSON, newest first. */
-    public List<JsonNode> getStatements(String symbol, String statementType) {
-        List<JsonNode> rows = new ArrayList<>();
+    public List<Map<String, Object>> getStatements(String symbol, String statementType) {
+        List<Map<String, Object>> rows = new ArrayList<>();
         for (StockStatementJpaEntity e : statementRepo.findBySymbolAndStatementTypeOrderByEndDateDesc(symbol, statementType)) {
             try {
-                rows.add(objectMapper.readTree(e.getRawJson()));
+                rows.add(objectMapper.readValue(e.getRawJson(), new TypeReference<Map<String, Object>>() {}));
             } catch (Exception ex) {
                 log.warn("Failed to parse stored {} for {} ({})", statementType, symbol, e.getEndDate());
             }

@@ -388,7 +388,11 @@ public class BrapiAnalysisClient {
         }
     }
 
-    /** Fetches cash dividends for comma-separated symbols via /api/v2/stocks/dividends. */
+    /**
+     * Fetches cash dividends for comma-separated symbols via /api/v2/stocks/dividends.
+     * Some symbols make brapi return 400 for the whole batch — on failure the batch is
+     * split in half and retried so one bad symbol doesn't discard the others.
+     */
     public List<BrapiDividendsResponse.Result> fetchDividendsBatch(String symbols) {
         try {
             BrapiDividendsResponse response = webClient.get()
@@ -401,6 +405,14 @@ public class BrapiAnalysisClient {
                     .filter(r -> r != null && r.symbol() != null && r.data() != null)
                     .toList();
         } catch (Exception e) {
+            if (symbols.contains(",")) {
+                String[] parts = symbols.split(",");
+                int mid = parts.length / 2;
+                List<BrapiDividendsResponse.Result> out = new java.util.ArrayList<>();
+                out.addAll(fetchDividendsBatch(String.join(",", java.util.Arrays.copyOfRange(parts, 0, mid))));
+                out.addAll(fetchDividendsBatch(String.join(",", java.util.Arrays.copyOfRange(parts, mid, parts.length))));
+                return out;
+            }
             log.warn("Failed to fetch dividends for [{}]: {}", symbols, e.getMessage());
             return List.of();
         }

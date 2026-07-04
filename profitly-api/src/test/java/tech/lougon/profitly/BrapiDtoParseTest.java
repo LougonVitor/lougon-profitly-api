@@ -454,10 +454,10 @@ class BrapiDtoParseTest {
 
         assertThat(response.results()).hasSize(1);
         var row = response.results().get(0).data().get(0);
-        assertThat(row.get("endDate").asText()).isEqualTo("2025-12-31");
-        assertThat(row.get("type").asText()).isEqualTo("yearly");
-        assertThat(row.get("netIncome").asLong()).isEqualTo(110605000000L);
-        // raw JSON keeps unknown fields — nothing is lost when brapi adds columns
-        assertThat(row.get("someFutureField").asText()).isEqualTo("must survive");
+        assertThat(row.get("endDate")).isEqualTo("2025-12-31");
+        assertThat(row.get("type")).isEqualTo("yearly");
+        assertThat(((Number) row.get("netIncome")).longValue()).isEqualTo(110605000000L);
+        // generic map keeps unknown fields — nothing is lost when brapi adds columns
+        assertThat(row.get("someFutureField")).isEqualTo("must survive");
     }
 }
