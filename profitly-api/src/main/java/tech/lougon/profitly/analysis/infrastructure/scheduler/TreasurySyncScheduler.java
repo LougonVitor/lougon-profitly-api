@@ -72,19 +72,7 @@ public class TreasurySyncScheduler {
                 log.warn("Failed to save treasury bond {}: {}", item.symbol(), e.getMessage());
             }
         }
-        log.info("Treasury bonds synced: {}/{}", synced, list.size());
-
-        // Sync rate history for each bond
-        for (BrapiTreasuryListResponse.TreasuryItem item : list) {
-            if (item.symbol() == null) continue;
-            try {
-                syncHistory(item.symbol());
-            } catch (Exception e) {
-                log.warn("Treasury history sync failed for {}: {}", item.symbol(), e.getMessage());
-            }
-        }
-
-        log.info("Treasury sync complete");
+        log.info("Treasury sync complete: {}/{}", synced, list.size());
     }
 
     private void saveCurrent(BrapiTreasuryListResponse.TreasuryItem item) {

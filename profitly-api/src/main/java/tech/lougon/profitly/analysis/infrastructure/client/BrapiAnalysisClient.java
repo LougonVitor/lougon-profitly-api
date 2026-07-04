@@ -228,7 +228,9 @@ public class BrapiAnalysisClient {
     public List<BrapiTreasuryListResponse.TreasuryItem> fetchTreasuryList() {
         try {
             BrapiTreasuryListResponse response = webClient.get()
-                    .uri("/api/v2/treasury/list")
+                    .uri(u -> u.path("/api/v2/treasury/list")
+                            .queryParam("limit", 10000)
+                            .build())
                     .retrieve()
                     .bodyToMono(BrapiTreasuryListResponse.class)
                     .block();
