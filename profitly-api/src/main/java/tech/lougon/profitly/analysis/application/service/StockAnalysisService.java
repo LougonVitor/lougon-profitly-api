@@ -113,9 +113,28 @@ public class StockAnalysisService {
         for (StockFinancialsJpaEntity f : financialsRepo.findBySymbolIn(peerSymbols)) {
             financials.put(f.getSymbol(), f);
         }
+        Map<String, StockQuoteJpaEntity> quotes = new LinkedHashMap<>();
+        for (StockQuoteJpaEntity q : quoteRepo.findAllById(peerSymbols)) {
+            quotes.put(q.getSymbol(), q);
+        }
+
+        // Effective P/L: brapi value when present, otherwise price / EPS (same fallback the
+        // metrics bar uses). Sector average ignores negative P/L (loss-making companies).
+        Map<String, Double> effectivePl = new LinkedHashMap<>();
+        for (Map.Entry<String, TickerAnalysis> en : analyses.entrySet()) {
+            Double v = toDouble(en.getValue().trailingPE());
+            if (v == null) {
+                Double eps = toDouble(en.getValue().earningsPerShare());
+                StockQuoteJpaEntity q = quotes.get(en.getKey());
+                Double price = q != null ? q.getPrice() : null;
+                if (eps != null && eps != 0 && price != null) v = price / eps;
+            }
+            if (v != null) effectivePl.put(en.getKey(), v);
+        }
 
         Map<String, Object> indicators = new LinkedHashMap<>();
-        indicators.put("pl", compare(symbol, analyses, a -> toDouble(a.trailingPE())));
+        indicators.put("pl", comparisonEntry(effectivePl.get(symbol),
+                effectivePl.values().stream().filter(v -> v > 0).mapToDouble(Double::doubleValue).toArray()));
         indicators.put("pvp", compare(symbol, analyses, a -> toDouble(a.priceToBook())));
         indicators.put("dividendYield", compare(symbol, analyses, a -> toDouble(a.dividendYield())));
         indicators.put("evEbitda", compare(symbol, analyses, a -> toDouble(a.enterpriseToEbitda())));
