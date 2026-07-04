@@ -11,6 +11,8 @@ import tech.lougon.profitly.analysis.domain.repository.DividendRepository;
 import tech.lougon.profitly.analysis.domain.repository.TickerAnalysisRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.*;
 
+import java.time.LocalDate;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -153,7 +155,149 @@ public class StockAnalysisService {
         return Optional.of(result);
     }
 
+    /**
+     * Computes the Investidor10-style fundamental indicator grid from stored data only.
+     * Percentages are returned as fractions (0.0823 = 8.23%); ratios as plain numbers.
+     * Indicators whose inputs are missing come back as null and are hidden by the UI.
+     */
+    public Map<String, Double> getKeyIndicators(String symbol) {
+        TickerAnalysis a = analysisRepository.findBySymbol(symbol).orElse(null);
+        StockFinancialsJpaEntity f = financialsRepo.findById(symbol).orElse(null);
+        StockQuoteJpaEntity q = quoteRepo.findById(symbol).orElse(null);
+
+        Double price = q != null ? q.getPrice() : null;
+        Double marketCap = a != null && a.marketCap() != null ? a.marketCap().doubleValue()
+                : (q != null && q.getMarketCap() != null ? q.getMarketCap().doubleValue() : null);
+        Double enterpriseValue = a != null && a.enterpriseValue() != null ? a.enterpriseValue().doubleValue() : null;
+        Double eps = a != null ? toDouble(a.earningsPerShare()) : null;
+        Double totalRevenueTtm = f != null && f.getTotalRevenue() != null ? f.getTotalRevenue().doubleValue() : null;
+
+        // Latest balance sheet (any period — quarterly is the freshest snapshot)
+        Map<String, Object> balance = latestStatement(symbol, "balance_sheet", null);
+        Double totalAssets = numOf(balance, "totalAssets");
+        Double equity = numOf(balance, "shareholdersEquity", "totalStockholderEquity");
+        Double totalLiab = numOf(balance, "totalLiab");
+        if (totalLiab == null && totalAssets != null && equity != null) totalLiab = totalAssets - equity;
+        Double curAssets = numOf(balance, "totalCurrentAssets", "currentAssets");
+        Double curLiab = numOf(balance, "currentLiabilities", "totalCurrentLiabilities");
+
+        // Latest yearly income statement for EBIT / NOPAT
+        Map<String, Object> income = latestStatement(symbol, "income_statement", "yearly");
+        Double ebit = numOf(income, "ebit", "cleanEbit");
+        Double nopat = numOf(income, "cleanNopat");
+        Double revenueYearly = numOf(income, "totalRevenue");
+
+        // Dividends of the last 12 months (per share)
+        double div12m = 0;
+        String cutoff = LocalDate.now().minusMonths(12).toString();
+        for (DividendEvent d : dividendRepository.findBySymbol(symbol)) {
+            if (d.rate() == null || d.rate() <= 0 || d.lastDatePrior() == null || d.lastDatePrior().length() < 10) continue;
+            if (d.lastDatePrior().substring(0, 10).compareTo(cutoff) >= 0) div12m += d.rate();
+        }
+
+        Double pl = a != null ? toDouble(a.trailingPE()) : null;
+        if (pl == null && eps != null && eps != 0 && price != null) pl = price / eps;
+
+        Double dy = a != null ? toDouble(a.dividendYield()) : null;
+        if (dy == null && price != null && price > 0 && div12m > 0) dy = div12m / price;
+
+        Map<String, Double> ind = new LinkedHashMap<>();
+        ind.put("pl", pl);
+        ind.put("psr", ratio(marketCap, totalRevenueTtm != null ? totalRevenueTtm : revenueYearly));
+        ind.put("pvp", a != null ? toDouble(a.priceToBook()) : null);
+        ind.put("dividendYield", dy);
+        ind.put("payout", eps != null && eps > 0 && div12m > 0 ? div12m / eps : null);
+        ind.put("margemLiquida", f != null ? f.getProfitMargins() : null);
+        ind.put("margemBruta", f != null ? f.getGrossMargins() : null);
+        ind.put("margemEbit", ebit != null && revenueYearly != null && revenueYearly != 0
+                ? ebit / revenueYearly : (f != null ? f.getOperatingMargins() : null));
+        ind.put("evEbit", ratio(enterpriseValue, ebit));
+        ind.put("pEbit", ratio(marketCap, ebit));
+        ind.put("pAtivo", ratio(marketCap, totalAssets));
+        ind.put("pCapGiro", curAssets != null && curLiab != null
+                ? ratio(marketCap, curAssets - curLiab) : null);
+        ind.put("pAtivoCircLiq", curAssets != null && totalLiab != null
+                ? ratio(marketCap, curAssets - totalLiab) : null);
+        ind.put("vpa", a != null ? toDouble(a.bookValue()) : null);
+        ind.put("lpa", eps);
+        ind.put("giroAtivos", ratio(totalRevenueTtm != null ? totalRevenueTtm : revenueYearly, totalAssets));
+        ind.put("roe", f != null ? f.getReturnOnEquity() : null);
+        ind.put("roic", computeRoic(nopat, ebit, equity, f));
+        ind.put("roa", f != null ? f.getReturnOnAssets() : null);
+        ind.put("patrimonioAtivos", ratio(equity, totalAssets));
+        ind.put("passivosAtivos", ratio(totalLiab, totalAssets));
+        ind.put("liquidezCorrente", f != null ? f.getCurrentRatio() : null);
+        ind.put("cagrReceitas5a", cagr5y(symbol, "totalRevenue"));
+        ind.put("cagrLucros5a", cagr5y(symbol, "netIncome", "netIncomeFromContinuingOps", "netIncomeApplicableToCommonShares"));
+        return ind;
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    private Double computeRoic(Double nopat, Double ebit, Double equity, StockFinancialsJpaEntity f) {
+        // NOPAT: reported when available, otherwise EBIT net of the standard 34% corporate tax
+        Double effectiveNopat = nopat != null ? nopat : (ebit != null ? ebit * 0.66 : null);
+        if (effectiveNopat == null || equity == null || f == null) return null;
+        double investedCapital = equity
+                + (f.getTotalDebt() != null ? f.getTotalDebt() : 0)
+                - (f.getTotalCash() != null ? f.getTotalCash() : 0);
+        return investedCapital != 0 ? effectiveNopat / investedCapital : null;
+    }
+
+    /** 5-year CAGR from yearly income statements: (latest / 5-years-ago)^(1/years) − 1. */
+    private Double cagr5y(String symbol, String... fields) {
+        List<Map<String, Object>> yearly = getStatements(symbol, "income_statement").stream()
+                .filter(r -> "yearly".equalsIgnoreCase(String.valueOf(r.get("type"))))
+                .toList(); // already sorted newest first
+        if (yearly.size() < 2) return null;
+
+        Map<String, Object> latest = yearly.get(0);
+        Double v1 = numOf(latest, fields);
+        int latestYear = yearOf(latest);
+        if (v1 == null || v1 <= 0 || latestYear == 0) return null;
+
+        // find the row closest to 5 years before the latest
+        Map<String, Object> base = null;
+        int baseYear = 0;
+        for (Map<String, Object> row : yearly) {
+            int y = yearOf(row);
+            if (y != 0 && y <= latestYear - 5) { base = row; baseYear = y; break; }
+        }
+        if (base == null) { base = yearly.get(yearly.size() - 1); baseYear = yearOf(base); }
+        int years = latestYear - baseYear;
+        Double v0 = numOf(base, fields);
+        if (v0 == null || v0 <= 0 || years < 2) return null;
+
+        return Math.pow(v1 / v0, 1.0 / years) - 1.0;
+    }
+
+    private Map<String, Object> latestStatement(String symbol, String statementType, String periodType) {
+        return getStatements(symbol, statementType).stream()
+                .filter(r -> periodType == null || periodType.equalsIgnoreCase(String.valueOf(r.get("type"))))
+                .findFirst()
+                .orElse(Map.of());
+    }
+
+    private static int yearOf(Map<String, Object> row) {
+        Object endDate = row.get("endDate");
+        if (endDate == null || String.valueOf(endDate).length() < 4) return 0;
+        try {
+            return Integer.parseInt(String.valueOf(endDate).substring(0, 4));
+        } catch (NumberFormatException e) { return 0; }
+    }
+
+    private static Double numOf(Map<String, Object> row, String... fields) {
+        for (String field : fields) {
+            Object v = row.get(field);
+            if (v instanceof Number n) return n.doubleValue();
+        }
+        return null;
+    }
+
+    private static Double ratio(Double numerator, Double denominator) {
+        if (numerator == null || denominator == null || denominator == 0) return null;
+        return numerator / denominator;
+    }
 
     private Map<String, Object> compare(String symbol, Map<String, TickerAnalysis> peers,
                                         Function<TickerAnalysis, Double> extractor) {

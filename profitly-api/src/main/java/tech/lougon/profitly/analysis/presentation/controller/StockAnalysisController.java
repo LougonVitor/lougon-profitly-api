@@ -32,7 +32,13 @@ public class StockAnalysisController {
         body.put("financials", service.getFinancials(s).orElse(null));
         body.put("dividends", service.getDividendAnalysis(s));
         body.put("sectorComparison", service.getSectorComparison(s).orElse(null));
+        body.put("keyIndicators", service.getKeyIndicators(s));
         return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/{symbol}/indicators")
+    public ResponseEntity<Map<String, Double>> getKeyIndicators(@PathVariable String symbol) {
+        return ResponseEntity.ok(service.getKeyIndicators(symbol.toUpperCase()));
     }
 
     @GetMapping("/{symbol}/quote")
