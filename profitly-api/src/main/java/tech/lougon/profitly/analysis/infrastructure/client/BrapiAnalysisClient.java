@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiListResponse;
@@ -191,22 +192,20 @@ public class BrapiAnalysisClient {
         }
     }
 
-    public List<BrapiDividendsResponse.CashDividend> fetchFiiDividends(String symbol) {
+    public List<BrapiFiiDividendsResponse.FiiDividend> fetchFiiDividends(String symbol) {
         try {
-            BrapiDividendsResponse response = webClient.get()
+            BrapiFiiDividendsResponse response = webClient.get()
                     .uri(u -> u.path("/api/v2/fii/dividends")
                             .queryParam("symbols", symbol)
                             .build())
                     .retrieve()
-                    .bodyToMono(BrapiDividendsResponse.class)
+                    .bodyToMono(BrapiFiiDividendsResponse.class)
                     .block();
 
-            if (response == null || response.results() == null || response.results().isEmpty()) {
-                return List.of();
-            }
-            var data = response.results().get(0).data();
-            if (data == null || data.cashDividends() == null) return List.of();
-            return data.cashDividends();
+            if (response == null || response.dividends() == null) return List.of();
+            return response.dividends().stream()
+                    .filter(d -> d != null && symbol.equalsIgnoreCase(d.symbol()))
+                    .toList();
         } catch (Exception e) {
             log.warn("Failed to fetch FII dividends for {}: {}", symbol, e.getMessage());
             return List.of();

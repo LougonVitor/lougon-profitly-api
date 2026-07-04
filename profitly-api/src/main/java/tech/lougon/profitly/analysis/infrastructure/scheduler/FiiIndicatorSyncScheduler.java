@@ -7,11 +7,15 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiListResponse;
+import tech.lougon.profitly.analysis.infrastructure.persistence.DividendEventJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FiiIndicatorHistoryJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FiiIndicatorJpaEntity;
+import tech.lougon.profitly.analysis.infrastructure.persistence.JpaDividendEventRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorRepository;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
@@ -32,15 +36,18 @@ public class FiiIndicatorSyncScheduler {
     private final JpaTickerRepository tickerRepo;
     private final JpaFiiIndicatorRepository indicatorRepo;
     private final JpaFiiIndicatorHistoryRepository historyRepo;
+    private final JpaDividendEventRepository dividendRepo;
     private final BrapiAnalysisClient brapiClient;
 
     public FiiIndicatorSyncScheduler(JpaTickerRepository tickerRepo,
                                      JpaFiiIndicatorRepository indicatorRepo,
                                      JpaFiiIndicatorHistoryRepository historyRepo,
+                                     JpaDividendEventRepository dividendRepo,
                                      BrapiAnalysisClient brapiClient) {
         this.tickerRepo = tickerRepo;
         this.indicatorRepo = indicatorRepo;
         this.historyRepo = historyRepo;
+        this.dividendRepo = dividendRepo;
         this.brapiClient = brapiClient;
     }
 
@@ -68,13 +75,18 @@ public class FiiIndicatorSyncScheduler {
         // Step 1: sync current indicators in batches
         Set<String> synced = syncCurrentBatched(fiiSymbols);
 
-        // Step 2: sync history only for symbols that returned data
-        log.info("Syncing FII indicator history for {} tickers that have indicator data", synced.size());
+        // Step 2: sync history and dividends only for symbols that returned data
+        log.info("Syncing FII indicator history and dividends for {} tickers", synced.size());
         for (String symbol : synced) {
             try {
                 syncHistory(symbol);
             } catch (Exception e) {
                 log.warn("FII history sync failed for {}: {}", symbol, e.getMessage());
+            }
+            try {
+                syncDividends(symbol);
+            } catch (Exception e) {
+                log.warn("FII dividend sync failed for {}: {}", symbol, e.getMessage());
             }
         }
 
@@ -161,6 +173,28 @@ public class FiiIndicatorSyncScheduler {
             entity.setSyncedAt(now);
             historyRepo.save(entity);
             existingDates.add(refDate);
+        }
+    }
+
+    @Transactional
+    void syncDividends(String symbol) {
+        List<BrapiFiiDividendsResponse.FiiDividend> dividends = brapiClient.fetchFiiDividends(symbol);
+        if (dividends.isEmpty()) return;
+
+        // Replace all dividends for this symbol (same strategy as stock dividend sync)
+        dividendRepo.deleteBySymbol(symbol);
+
+        for (var d : dividends) {
+            var entity = new DividendEventJpaEntity();
+            entity.setSymbol(symbol);
+            entity.setLabel(d.label());
+            entity.setRate(d.rate());
+            entity.setPaymentDate(d.paymentDate());
+            entity.setLastDatePrior(d.lastDatePrior());
+            entity.setApprovedOn(d.approvedOn());
+            entity.setRelatedTo(d.relatedTo());
+            entity.setRemarks(d.remarks());
+            dividendRepo.save(entity);
         }
     }
 
