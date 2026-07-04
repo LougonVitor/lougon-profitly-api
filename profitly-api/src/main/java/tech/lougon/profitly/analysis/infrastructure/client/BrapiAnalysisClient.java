@@ -17,7 +17,6 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryList
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundListResponse;
-import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundDividendsResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -280,41 +279,24 @@ public class BrapiAnalysisClient {
         }
     }
 
-    /** Fetches FIAGRO funds from brapi. Note: brapi uses /api/v2/fiagro/list (same pattern as /fii/list). */
-    public List<BrapiFundListResponse.FundItem> fetchFundList(String symbols) {
+    /**
+     * Fetches all funds of a given assetType from /api/v2/funds/list in a single request.
+     * assetType values: "fiagro" | "fiinfra" | "fidc" | "fip" | "fif" | "etf" | "other".
+     */
+    public List<BrapiFundListResponse.FundItem> fetchFundList(String assetType) {
         try {
             BrapiFundListResponse response = webClient.get()
-                    .uri(u -> {
-                        var b = u.path("/api/v2/fiagro/list");
-                        if (symbols != null && !symbols.isBlank()) b = b.queryParam("symbols", symbols);
-                        return b.build();
-                    })
+                    .uri(u -> u.path("/api/v2/funds/list")
+                            .queryParam("assetType", assetType)
+                            .queryParam("limit", 10000)
+                            .build())
                     .retrieve()
                     .bodyToMono(BrapiFundListResponse.class)
                     .block();
-            if (response == null || response.results() == null) return List.of();
-            return response.results().stream().filter(f -> f != null && f.symbol() != null).toList();
+            if (response == null || response.funds() == null) return List.of();
+            return response.funds().stream().filter(f -> f != null && f.symbol() != null).toList();
         } catch (Exception e) {
-            log.warn("Failed to fetch fund list: {}", e.getMessage());
-            return List.of();
-        }
-    }
-
-    public List<BrapiFundDividendsResponse.FundDividend> fetchFundDividends(String symbol) {
-        try {
-            BrapiFundDividendsResponse response = webClient.get()
-                    .uri(u -> u.path("/api/v2/fiagro/dividends")
-                            .queryParam("symbols", symbol)
-                            .build())
-                    .retrieve()
-                    .bodyToMono(BrapiFundDividendsResponse.class)
-                    .block();
-            if (response == null || response.dividends() == null) return List.of();
-            return response.dividends().stream()
-                    .filter(d -> d != null && symbol.equalsIgnoreCase(d.symbol()))
-                    .toList();
-        } catch (Exception e) {
-            log.warn("Failed to fetch fund dividends for {}: {}", symbol, e.getMessage());
+            log.warn("Failed to fetch fund list for assetType={}: {}", assetType, e.getMessage());
             return List.of();
         }
     }

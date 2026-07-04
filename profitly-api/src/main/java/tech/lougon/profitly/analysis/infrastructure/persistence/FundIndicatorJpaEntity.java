@@ -14,8 +14,23 @@ public class FundIndicatorJpaEntity {
     @Column(name = "name")
     private String name;
 
+    @Column(name = "legal_name")
+    private String legalName;
+
+    @Column(name = "cnpj", length = 20)
+    private String cnpj;
+
     @Column(name = "fund_type", length = 30)
     private String fundType;
+
+    @Column(name = "b3_classification", length = 100)
+    private String b3Classification;
+
+    @Column(name = "equity")
+    private Double equity;
+
+    @Column(name = "total_assets")
+    private Double totalAssets;
 
     @Column(name = "price")
     private Double price;
@@ -53,8 +68,18 @@ public class FundIndicatorJpaEntity {
     public void setSymbol(String v) { this.symbol = v; }
     public String getName() { return name; }
     public void setName(String v) { this.name = v; }
+    public String getLegalName() { return legalName; }
+    public void setLegalName(String v) { this.legalName = v; }
+    public String getCnpj() { return cnpj; }
+    public void setCnpj(String v) { this.cnpj = v; }
     public String getFundType() { return fundType; }
     public void setFundType(String v) { this.fundType = v; }
+    public String getB3Classification() { return b3Classification; }
+    public void setB3Classification(String v) { this.b3Classification = v; }
+    public Double getEquity() { return equity; }
+    public void setEquity(Double v) { this.equity = v; }
+    public Double getTotalAssets() { return totalAssets; }
+    public void setTotalAssets(Double v) { this.totalAssets = v; }
     public Double getPrice() { return price; }
     public void setPrice(Double v) { this.price = v; }
     public Double getDividendYield12m() { return dividendYield12m; }
