@@ -280,9 +280,11 @@ public class BrapiAnalysisClient {
     public List<BrapiFundListResponse.FundItem> fetchFundList(String symbols) {
         try {
             BrapiFundListResponse response = webClient.get()
-                    .uri(u -> u.path("/api/v2/funds/list")
-                            .queryParam("symbols", symbols)
-                            .build())
+                    .uri(u -> {
+                        var b = u.path("/api/v2/funds/list");
+                        if (symbols != null && !symbols.isBlank()) b = b.queryParam("symbols", symbols);
+                        return b.build();
+                    })
                     .retrieve()
                     .bodyToMono(BrapiFundListResponse.class)
                     .block();

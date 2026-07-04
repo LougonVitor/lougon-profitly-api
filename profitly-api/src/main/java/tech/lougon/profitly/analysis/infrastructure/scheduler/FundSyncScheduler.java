@@ -15,32 +15,32 @@ import tech.lougon.profitly.analysis.infrastructure.persistence.DividendEventJpa
 import tech.lougon.profitly.analysis.infrastructure.persistence.FundIndicatorJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaDividendEventRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFundIndicatorRepository;
+import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
+import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 
+import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Component
 public class FundSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(FundSyncScheduler.class);
-    private static final int BATCH_SIZE = 20;
-
-    // Fund types to sync from brapi
-    private static final List<String> FUND_TYPES = List.of("FIAGRO", "FIDC", "FIP", "FI-Infra");
 
     private final BrapiAnalysisClient brapiClient;
     private final JpaFundIndicatorRepository fundRepo;
     private final JpaDividendEventRepository dividendRepo;
+    private final JpaTickerRepository tickerRepo;
 
     public FundSyncScheduler(BrapiAnalysisClient brapiClient,
                               JpaFundIndicatorRepository fundRepo,
-                              JpaDividendEventRepository dividendRepo) {
+                              JpaDividendEventRepository dividendRepo,
+                              JpaTickerRepository tickerRepo) {
         this.brapiClient = brapiClient;
         this.fundRepo = fundRepo;
         this.dividendRepo = dividendRepo;
+        this.tickerRepo = tickerRepo;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -54,7 +54,6 @@ public class FundSyncScheduler {
 
     @Scheduled(cron = "0 40 19 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
-        // Fetch all funds from brapi (no type filter at request level, filter response)
         List<BrapiFundListResponse.FundItem> allFunds = brapiClient.fetchFundList("");
         if (allFunds.isEmpty()) {
             log.warn("Fund list returned 0 results — skipping fund sync");
@@ -68,9 +67,10 @@ public class FundSyncScheduler {
             if (item.symbol() == null) continue;
             try {
                 saveCurrent(item);
+                upsertTicker(item);
                 synced.add(item.symbol());
             } catch (Exception e) {
-                log.warn("Failed to save fund indicator for {}: {}", item.symbol(), e.getMessage());
+                log.warn("Failed to save fund {}: {}", item.symbol(), e.getMessage());
             }
         }
 
@@ -106,6 +106,28 @@ public class FundSyncScheduler {
         }
         entity.setSyncedAt(Instant.now());
         fundRepo.save(entity);
+    }
+
+    /** Upserts a fund into the tickers table so it appears in search. */
+    private void upsertTicker(BrapiFundListResponse.FundItem item) {
+        TickerJpaEntity ticker = tickerRepo.findBySymbol(item.symbol())
+                .orElseGet(TickerJpaEntity::new);
+
+        String name = item.name() != null ? item.name() : item.symbol();
+        String fundType = item.type() != null ? item.type().toLowerCase() : "fund";
+
+        ticker.setSymbol(item.symbol());
+        ticker.setName(name);
+        ticker.setLongName(name);
+        ticker.setAssetType(fundType);
+        ticker.setSubType(item.type());
+        ticker.setIsActive(true);
+        if (item.price() != null) {
+            ticker.setLastPrice(BigDecimal.valueOf(item.price()));
+        }
+        ticker.setSyncedAt(Instant.now());
+
+        tickerRepo.save(ticker);
     }
 
     @Transactional

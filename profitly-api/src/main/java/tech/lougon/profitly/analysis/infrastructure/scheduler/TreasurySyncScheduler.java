@@ -15,7 +15,10 @@ import tech.lougon.profitly.analysis.infrastructure.persistence.TreasuryBondJpaE
 import tech.lougon.profitly.analysis.infrastructure.persistence.TreasuryBondHistoryJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaTreasuryBondRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaTreasuryBondHistoryRepository;
+import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
+import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -33,13 +36,16 @@ public class TreasurySyncScheduler {
     private final BrapiAnalysisClient brapiClient;
     private final JpaTreasuryBondRepository bondRepo;
     private final JpaTreasuryBondHistoryRepository historyRepo;
+    private final JpaTickerRepository tickerRepo;
 
     public TreasurySyncScheduler(BrapiAnalysisClient brapiClient,
                                   JpaTreasuryBondRepository bondRepo,
-                                  JpaTreasuryBondHistoryRepository historyRepo) {
+                                  JpaTreasuryBondHistoryRepository historyRepo,
+                                  JpaTickerRepository tickerRepo) {
         this.brapiClient = brapiClient;
         this.bondRepo = bondRepo;
         this.historyRepo = historyRepo;
+        this.tickerRepo = tickerRepo;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -60,11 +66,9 @@ public class TreasurySyncScheduler {
         }
         log.info("Syncing {} treasury bonds", list.size());
 
-        // Build symbol→listItem map for metadata
         Map<String, BrapiTreasuryListResponse.TreasuryItem> metaMap = list.stream()
                 .collect(Collectors.toMap(BrapiTreasuryListResponse.TreasuryItem::symbol, i -> i, (a, b) -> a));
 
-        // Fetch current indicators in batches
         List<String> symbols = list.stream().map(BrapiTreasuryListResponse.TreasuryItem::symbol).toList();
         List<List<String>> batches = partition(symbols, BATCH_SIZE);
 
@@ -78,7 +82,9 @@ public class TreasurySyncScheduler {
                 for (BrapiTreasuryIndicatorsResponse.TreasuryIndicator ind : indicators) {
                     if (ind.symbol() == null) continue;
                     try {
-                        saveCurrent(ind, metaMap.get(ind.symbol()));
+                        BrapiTreasuryListResponse.TreasuryItem meta = metaMap.get(ind.symbol());
+                        saveCurrent(ind, meta);
+                        upsertTicker(ind, meta);
                         synced++;
                     } catch (Exception e) {
                         log.warn("Failed to save treasury bond {}: {}", ind.symbol(), e.getMessage());
@@ -91,7 +97,6 @@ public class TreasurySyncScheduler {
 
         log.info("Treasury current indicators synced: {}/{}", synced, symbols.size());
 
-        // Sync history for each bond
         for (String symbol : symbols) {
             try {
                 syncHistory(symbol);
@@ -125,6 +130,27 @@ public class TreasurySyncScheduler {
         entity.setSyncedAt(Instant.now());
 
         bondRepo.save(entity);
+    }
+
+    /** Upserts a treasury bond into the tickers table so it appears in search. */
+    private void upsertTicker(BrapiTreasuryIndicatorsResponse.TreasuryIndicator ind,
+                               BrapiTreasuryListResponse.TreasuryItem meta) {
+        TickerJpaEntity ticker = tickerRepo.findBySymbol(ind.symbol())
+                .orElseGet(TickerJpaEntity::new);
+
+        String name = meta != null && meta.name() != null ? meta.name() : ind.symbol();
+        ticker.setSymbol(ind.symbol());
+        ticker.setName(name);
+        ticker.setLongName(name);
+        ticker.setAssetType("treasury");
+        ticker.setSubType(meta != null ? meta.type() : null);
+        ticker.setIsActive(true);
+        if (ind.buyPrice() != null) {
+            ticker.setLastPrice(BigDecimal.valueOf(ind.buyPrice()));
+        }
+        ticker.setSyncedAt(Instant.now());
+
+        tickerRepo.save(ticker);
     }
 
     private void syncHistory(String symbol) {
