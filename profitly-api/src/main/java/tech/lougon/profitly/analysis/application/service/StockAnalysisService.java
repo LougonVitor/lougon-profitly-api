@@ -166,8 +166,11 @@ public class StockAnalysisService {
         StockQuoteJpaEntity q = quoteRepo.findById(symbol).orElse(null);
 
         Double price = q != null ? q.getPrice() : null;
-        Double marketCap = a != null && a.marketCap() != null ? a.marketCap().doubleValue()
-                : (q != null && q.getMarketCap() != null ? q.getMarketCap().doubleValue() : null);
+        // no nested ternaries here — mixing primitive double with a nullable Double branch
+        // makes Java unbox the null and NPE
+        Double marketCap = null;
+        if (a != null && a.marketCap() != null) marketCap = a.marketCap().doubleValue();
+        else if (q != null && q.getMarketCap() != null) marketCap = q.getMarketCap().doubleValue();
         Double enterpriseValue = a != null && a.enterpriseValue() != null ? a.enterpriseValue().doubleValue() : null;
         Double eps = a != null ? toDouble(a.earningsPerShare()) : null;
         Double totalRevenueTtm = f != null && f.getTotalRevenue() != null ? f.getTotalRevenue().doubleValue() : null;
@@ -209,8 +212,10 @@ public class StockAnalysisService {
         ind.put("payout", eps != null && eps > 0 && div12m > 0 ? div12m / eps : null);
         ind.put("margemLiquida", f != null ? f.getProfitMargins() : null);
         ind.put("margemBruta", f != null ? f.getGrossMargins() : null);
-        ind.put("margemEbit", ebit != null && revenueYearly != null && revenueYearly != 0
-                ? ebit / revenueYearly : (f != null ? f.getOperatingMargins() : null));
+        Double margemEbit = null;
+        if (ebit != null && revenueYearly != null && revenueYearly != 0) margemEbit = ebit / revenueYearly;
+        else if (f != null) margemEbit = f.getOperatingMargins();
+        ind.put("margemEbit", margemEbit);
         ind.put("evEbit", ratio(enterpriseValue, ebit));
         ind.put("pEbit", ratio(marketCap, ebit));
         ind.put("pAtivo", ratio(marketCap, totalAssets));
