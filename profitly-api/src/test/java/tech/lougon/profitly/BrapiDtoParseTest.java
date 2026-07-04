@@ -190,17 +190,24 @@ class BrapiDtoParseTest {
     // ── Treasury List ─────────────────────────────────────────────────────────
 
     @Test
-    void treasuryList_parsesBonds() throws Exception {
+    void treasuryList_parsesRealBrapiResponse() throws Exception {
+        // Reflects actual brapi /api/v2/treasury/list structure: root key is "results", fields are bondType not name/type
         String json = """
                 {
-                  "treasuries": [
+                  "results": [
                     {
-                      "symbol": "tesouro-selic-01032031",
-                      "name": "Tesouro SELIC 2031",
-                      "type": "Tesouro SELIC",
-                      "indexer": "selic",
-                      "couponType": "zero",
-                      "maturityDate": "2031-03-01"
+                      "symbol": "tesouro-ipca-com-juros-semestrais-15082026",
+                      "bondType": "Tesouro IPCA+ com Juros Semestrais",
+                      "indexer": "ipca",
+                      "couponType": "semestral",
+                      "maturityDate": "2026-08-15",
+                      "durationDays": 44,
+                      "buyRate": 11.4,
+                      "sellRate": 11.52,
+                      "buyPrice": 4816.98,
+                      "sellPrice": 4813.73,
+                      "basePrice": 4813.73,
+                      "rateInfo": { "rateType": "realAnnualRateOverIpca" }
                     }
                   ]
                 }
@@ -208,49 +215,24 @@ class BrapiDtoParseTest {
 
         BrapiTreasuryListResponse response = mapper.readValue(json, BrapiTreasuryListResponse.class);
 
-        assertThat(response.treasuries()).hasSize(1);
-        BrapiTreasuryListResponse.TreasuryItem item = response.treasuries().get(0);
-        assertThat(item.symbol()).isEqualTo("tesouro-selic-01032031");
-        assertThat(item.name()).isEqualTo("Tesouro SELIC 2031");
-        assertThat(item.indexer()).isEqualTo("selic");
-        assertThat(item.couponType()).isEqualTo("zero");
-        assertThat(item.maturityDate()).isEqualTo("2031-03-01");
-    }
-
-    @Test
-    void treasuryIndicators_parsesRatesAndPrices() throws Exception {
-        String json = """
-                {
-                  "treasuries": [
-                    {
-                      "symbol": "tesouro-selic-01032031",
-                      "buyRate": 12.45,
-                      "sellRate": 12.38,
-                      "buyPrice": 14523.80,
-                      "sellPrice": 14519.20,
-                      "basePrice": 14500.00,
-                      "duration": 1825
-                    }
-                  ]
-                }
-                """;
-
-        BrapiTreasuryIndicatorsResponse response = mapper.readValue(json, BrapiTreasuryIndicatorsResponse.class);
-
-        assertThat(response.treasuries()).hasSize(1);
-        BrapiTreasuryIndicatorsResponse.TreasuryIndicator ind = response.treasuries().get(0);
-        assertThat(ind.symbol()).isEqualTo("tesouro-selic-01032031");
-        assertThat(ind.buyRate()).isEqualTo(12.45);
-        assertThat(ind.sellRate()).isEqualTo(12.38);
-        assertThat(ind.buyPrice()).isEqualTo(14523.80);
-        assertThat(ind.duration()).isEqualTo(1825);
+        assertThat(response.results()).hasSize(1);
+        BrapiTreasuryListResponse.TreasuryItem item = response.results().get(0);
+        assertThat(item.symbol()).isEqualTo("tesouro-ipca-com-juros-semestrais-15082026");
+        assertThat(item.bondType()).isEqualTo("Tesouro IPCA+ com Juros Semestrais");
+        assertThat(item.indexer()).isEqualTo("ipca");
+        assertThat(item.couponType()).isEqualTo("semestral");
+        assertThat(item.maturityDate()).isEqualTo("2026-08-15");
+        assertThat(item.durationDays()).isEqualTo(44);
+        assertThat(item.buyRate()).isEqualTo(11.4);
+        assertThat(item.buyPrice()).isEqualTo(4816.98);
     }
 
     @Test
     void treasuryHistory_parsesHistoricalRates() throws Exception {
+        // History endpoint also uses "results" as root key
         String json = """
                 {
-                  "treasuries": [
+                  "results": [
                     {
                       "symbol": "tesouro-selic-01032031",
                       "referenceDate": "2025-06-01",
@@ -266,8 +248,8 @@ class BrapiDtoParseTest {
 
         BrapiTreasuryHistoryResponse response = mapper.readValue(json, BrapiTreasuryHistoryResponse.class);
 
-        assertThat(response.treasuries()).hasSize(1);
-        BrapiTreasuryHistoryResponse.TreasuryHistoryEntry entry = response.treasuries().get(0);
+        assertThat(response.results()).hasSize(1);
+        BrapiTreasuryHistoryResponse.TreasuryHistoryEntry entry = response.results().get(0);
         assertThat(entry.referenceDate()).isEqualTo("2025-06-01");
         assertThat(entry.buyRate()).isEqualTo(12.20);
         assertThat(entry.buyPrice()).isEqualTo(14100.00);
@@ -277,9 +259,10 @@ class BrapiDtoParseTest {
 
     @Test
     void fundList_parsesAllFundTypes() throws Exception {
+        // brapi /api/v2/funds/list uses "results" as root key (same pattern as treasury/list)
         String json = """
                 {
-                  "funds": [
+                  "results": [
                     {
                       "symbol": "CPFF11",
                       "name": "CPF Fundo de Fundos FIAGRO",
@@ -300,8 +283,8 @@ class BrapiDtoParseTest {
 
         BrapiFundListResponse response = mapper.readValue(json, BrapiFundListResponse.class);
 
-        assertThat(response.funds()).hasSize(1);
-        BrapiFundListResponse.FundItem item = response.funds().get(0);
+        assertThat(response.results()).hasSize(1);
+        BrapiFundListResponse.FundItem item = response.results().get(0);
         assertThat(item.symbol()).isEqualTo("CPFF11");
         assertThat(item.type()).isEqualTo("FIAGRO");
         assertThat(item.price()).isEqualTo(9.80);

@@ -9,7 +9,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryListResponse;
-import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.persistence.TreasuryBondJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.TreasuryBondHistoryJpaEntity;
@@ -21,9 +20,7 @@ import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -31,7 +28,6 @@ import java.util.stream.Collectors;
 public class TreasurySyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(TreasurySyncScheduler.class);
-    private static final int BATCH_SIZE = 20;
 
     private final BrapiAnalysisClient brapiClient;
     private final JpaTreasuryBondRepository bondRepo;
@@ -59,103 +55,82 @@ public class TreasurySyncScheduler {
 
     @Scheduled(cron = "0 45 19 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
+        // /api/v2/treasury/list already returns current rates and prices — no separate indicators call needed
         List<BrapiTreasuryListResponse.TreasuryItem> list = brapiClient.fetchTreasuryList();
         if (list.isEmpty()) {
-            log.warn("Treasury list returned 0 bonds");
+            log.warn("Treasury list returned 0 bonds — check brapi token/endpoint");
             return;
         }
         log.info("Syncing {} treasury bonds", list.size());
 
-        Map<String, BrapiTreasuryListResponse.TreasuryItem> metaMap = list.stream()
-                .collect(Collectors.toMap(BrapiTreasuryListResponse.TreasuryItem::symbol, i -> i, (a, b) -> a));
-
-        List<String> symbols = list.stream().map(BrapiTreasuryListResponse.TreasuryItem::symbol).toList();
-        List<List<String>> batches = partition(symbols, BATCH_SIZE);
-
         int synced = 0;
-        for (List<String> batch : batches) {
+        for (BrapiTreasuryListResponse.TreasuryItem item : list) {
+            if (item.symbol() == null) continue;
             try {
-                String joined = String.join(",", batch);
-                List<BrapiTreasuryIndicatorsResponse.TreasuryIndicator> indicators =
-                        brapiClient.fetchTreasuryIndicators(joined);
-
-                for (BrapiTreasuryIndicatorsResponse.TreasuryIndicator ind : indicators) {
-                    if (ind.symbol() == null) continue;
-                    try {
-                        BrapiTreasuryListResponse.TreasuryItem meta = metaMap.get(ind.symbol());
-                        saveCurrent(ind, meta);
-                        upsertTicker(ind, meta);
-                        synced++;
-                    } catch (Exception e) {
-                        log.warn("Failed to save treasury bond {}: {}", ind.symbol(), e.getMessage());
-                    }
-                }
+                saveCurrent(item);
+                upsertTicker(item);
+                synced++;
             } catch (Exception e) {
-                log.warn("Treasury batch indicators failed for batch {}: {}", batch, e.getMessage());
+                log.warn("Failed to save treasury bond {}: {}", item.symbol(), e.getMessage());
             }
         }
+        log.info("Treasury bonds synced: {}/{}", synced, list.size());
 
-        log.info("Treasury current indicators synced: {}/{}", synced, symbols.size());
-
-        for (String symbol : symbols) {
+        // Sync rate history for each bond
+        for (BrapiTreasuryListResponse.TreasuryItem item : list) {
+            if (item.symbol() == null) continue;
             try {
-                syncHistory(symbol);
+                syncHistory(item.symbol());
             } catch (Exception e) {
-                log.warn("Treasury history sync failed for {}: {}", symbol, e.getMessage());
+                log.warn("Treasury history sync failed for {}: {}", item.symbol(), e.getMessage());
             }
         }
 
         log.info("Treasury sync complete");
     }
 
-    private void saveCurrent(BrapiTreasuryIndicatorsResponse.TreasuryIndicator ind,
-                              BrapiTreasuryListResponse.TreasuryItem meta) {
-        TreasuryBondJpaEntity entity = bondRepo.findById(ind.symbol())
-                .orElseGet(() -> { var e = new TreasuryBondJpaEntity(); e.setSymbol(ind.symbol()); return e; });
+    private void saveCurrent(BrapiTreasuryListResponse.TreasuryItem item) {
+        TreasuryBondJpaEntity entity = bondRepo.findById(item.symbol())
+                .orElseGet(() -> { var e = new TreasuryBondJpaEntity(); e.setSymbol(item.symbol()); return e; });
 
-        if (meta != null) {
-            entity.setName(meta.name());
-            entity.setBondType(meta.type());
-            entity.setIndexer(meta.indexer());
-            entity.setCouponType(meta.couponType());
-            entity.setMaturityDate(meta.maturityDate());
-        }
-
-        entity.setBuyRate(ind.buyRate());
-        entity.setSellRate(ind.sellRate());
-        entity.setBuyPrice(ind.buyPrice());
-        entity.setSellPrice(ind.sellPrice());
-        entity.setBasePrice(ind.basePrice());
-        entity.setDurationDays(ind.duration());
+        // bondType is the human-readable name (e.g. "Tesouro IPCA+ com Juros Semestrais")
+        entity.setName(item.bondType());
+        entity.setBondType(item.bondType());
+        entity.setIndexer(item.indexer());
+        entity.setCouponType(item.couponType());
+        entity.setMaturityDate(item.maturityDate());
+        entity.setDurationDays(item.durationDays());
+        entity.setBuyRate(item.buyRate());
+        entity.setSellRate(item.sellRate());
+        entity.setBuyPrice(item.buyPrice());
+        entity.setSellPrice(item.sellPrice());
+        entity.setBasePrice(item.basePrice());
         entity.setSyncedAt(Instant.now());
 
         bondRepo.save(entity);
     }
 
-    /** Upserts a treasury bond into the tickers table so it appears in search. */
-    private void upsertTicker(BrapiTreasuryIndicatorsResponse.TreasuryIndicator ind,
-                               BrapiTreasuryListResponse.TreasuryItem meta) {
-        TickerJpaEntity ticker = tickerRepo.findBySymbol(ind.symbol())
+    private void upsertTicker(BrapiTreasuryListResponse.TreasuryItem item) {
+        TickerJpaEntity ticker = tickerRepo.findBySymbol(item.symbol())
                 .orElseGet(TickerJpaEntity::new);
 
-        String name = meta != null && meta.name() != null ? meta.name() : ind.symbol();
-        ticker.setSymbol(ind.symbol());
+        String name = item.bondType() != null ? item.bondType() : item.symbol();
+        ticker.setSymbol(item.symbol());
         ticker.setName(name);
         ticker.setLongName(name);
         ticker.setAssetType("treasury");
-        ticker.setSubType(meta != null ? meta.type() : null);
+        ticker.setSubType(item.bondType());
         ticker.setIsActive(true);
-        if (ind.buyPrice() != null) {
-            ticker.setLastPrice(BigDecimal.valueOf(ind.buyPrice()));
+        if (item.buyPrice() != null) {
+            ticker.setLastPrice(BigDecimal.valueOf(item.buyPrice()));
         }
         ticker.setSyncedAt(Instant.now());
-
         tickerRepo.save(ticker);
     }
 
     private void syncHistory(String symbol) {
         boolean firstSync = historyRepo.countBySymbol(symbol) == 0;
-        String startDate = firstSync ? "2016-01-01" : LocalDate.now().minusMonths(3).toString();
+        String startDate = firstSync ? "2020-01-01" : LocalDate.now().minusMonths(3).toString();
 
         List<BrapiTreasuryHistoryResponse.TreasuryHistoryEntry> entries =
                 brapiClient.fetchTreasuryHistory(symbol, startDate, null);
@@ -184,13 +159,5 @@ public class TreasurySyncScheduler {
             historyRepo.save(entity);
             existingDates.add(refDate);
         }
-    }
-
-    private static <T> List<List<T>> partition(List<T> list, int size) {
-        List<List<T>> result = new ArrayList<>();
-        for (int i = 0; i < list.size(); i += size) {
-            result.add(list.subList(i, Math.min(i + size, list.size())));
-        }
-        return result;
     }
 }

@@ -230,8 +230,8 @@ public class BrapiAnalysisClient {
                     .retrieve()
                     .bodyToMono(BrapiTreasuryListResponse.class)
                     .block();
-            if (response == null || response.treasuries() == null) return List.of();
-            return response.treasuries().stream().filter(t -> t != null && t.symbol() != null).toList();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream().filter(t -> t != null && t.symbol() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch treasury list: {}", e.getMessage());
             return List.of();
@@ -269,8 +269,8 @@ public class BrapiAnalysisClient {
                     .retrieve()
                     .bodyToMono(BrapiTreasuryHistoryResponse.class)
                     .block();
-            if (response == null || response.treasuries() == null) return List.of();
-            return response.treasuries().stream().filter(e -> e != null && e.referenceDate() != null).toList();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream().filter(e -> e != null && e.referenceDate() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch treasury history for {}: {}", symbol, e.getMessage());
             return List.of();
@@ -288,8 +288,8 @@ public class BrapiAnalysisClient {
                     .retrieve()
                     .bodyToMono(BrapiFundListResponse.class)
                     .block();
-            if (response == null || response.funds() == null) return List.of();
-            return response.funds().stream().filter(f -> f != null && f.symbol() != null).toList();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream().filter(f -> f != null && f.symbol() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch fund list for [{}]: {}", symbols, e.getMessage());
             return List.of();

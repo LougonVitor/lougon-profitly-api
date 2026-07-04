@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record BrapiFundListResponse(List<FundItem> funds) {
+public record BrapiFundListResponse(List<FundItem> results) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record FundItem(
