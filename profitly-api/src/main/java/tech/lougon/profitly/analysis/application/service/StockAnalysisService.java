@@ -34,7 +34,7 @@ public class StockAnalysisService {
     private final TickerAnalysisRepository analysisRepository;
     private final DividendRepository dividendRepository;
     private final AnalysisService analysisService;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StockAnalysisService(JpaStockQuoteRepository quoteRepo,
                                 JpaStockProfileRepository profileRepo,
@@ -42,8 +42,7 @@ public class StockAnalysisService {
                                 JpaStockStatementRepository statementRepo,
                                 TickerAnalysisRepository analysisRepository,
                                 DividendRepository dividendRepository,
-                                AnalysisService analysisService,
-                                ObjectMapper objectMapper) {
+                                AnalysisService analysisService) {
         this.quoteRepo = quoteRepo;
         this.profileRepo = profileRepo;
         this.financialsRepo = financialsRepo;
@@ -51,7 +50,6 @@ public class StockAnalysisService {
         this.analysisRepository = analysisRepository;
         this.dividendRepository = dividendRepository;
         this.analysisService = analysisService;
-        this.objectMapper = objectMapper;
     }
 
     public Optional<StockQuoteJpaEntity> getQuote(String symbol) {
