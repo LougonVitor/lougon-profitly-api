@@ -1,8 +1,9 @@
 package tech.lougon.profitly.analysis.infrastructure.scheduler;
 
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -17,12 +18,17 @@ import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepositor
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class FiiIndicatorSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(FiiIndicatorSyncScheduler.class);
+    private static final int BATCH_SIZE = 20;
 
     private final JpaTickerRepository tickerRepo;
     private final JpaFiiIndicatorRepository indicatorRepo;
@@ -39,17 +45,17 @@ public class FiiIndicatorSyncScheduler {
         this.brapiClient = brapiClient;
     }
 
-    /** Runs once on startup (async so it doesn't block Spring context init). */
-    @PostConstruct
+    /** Runs once after Spring context is fully ready (non-blocking). */
+    @EventListener(ApplicationReadyEvent.class)
     @Async
     public void syncOnStartup() {
         if (indicatorRepo.count() == 0) {
-            log.info("fii_indicators table is empty — running initial sync on startup");
+            log.info("fii_indicators table is empty — running initial FII indicator sync");
             syncAll();
         }
     }
 
-    /** Nightly sync at 19:30, after the main ticker sync (19:00). */
+    /** Nightly sync at 19:30, after main ticker sync (19:00). */
     @Scheduled(cron = "0 30 19 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
         List<String> fiiSymbols = tickerRepo.findAll().stream()
@@ -58,27 +64,54 @@ public class FiiIndicatorSyncScheduler {
                 .map(t -> t.getSymbol())
                 .toList();
 
-        log.info("Syncing FII indicators for {} tickers", fiiSymbols.size());
-        int ok = 0;
-        for (String symbol : fiiSymbols) {
+        log.info("Syncing FII indicators for {} tickers in batches of {}", fiiSymbols.size(), BATCH_SIZE);
+
+        // Step 1: sync current indicators in batches
+        Set<String> synced = syncCurrentBatched(fiiSymbols);
+
+        // Step 2: sync history only for symbols that returned data
+        log.info("Syncing FII indicator history for {} tickers that have indicator data", synced.size());
+        for (String symbol : synced) {
             try {
-                syncCurrent(symbol);
                 syncHistory(symbol);
-                ok++;
             } catch (Exception e) {
-                log.warn("FII indicator sync failed for {}: {}", symbol, e.getMessage());
+                log.warn("FII history sync failed for {}: {}", symbol, e.getMessage());
             }
         }
-        log.info("FII indicator sync done: {}/{}", ok, fiiSymbols.size());
+
+        log.info("FII indicator sync complete: {}/{} tickers had indicator data", synced.size(), fiiSymbols.size());
     }
 
-    private void syncCurrent(String symbol) {
-        var opt = brapiClient.fetchFiiIndicators(symbol);
-        if (opt.isEmpty()) return;
+    /** Fetches current indicators in batches of 20. Returns symbols that had data. */
+    private Set<String> syncCurrentBatched(List<String> symbols) {
+        Set<String> synced = new java.util.LinkedHashSet<>();
+        List<List<String>> batches = partition(symbols, BATCH_SIZE);
 
-        BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo info = opt.get();
+        for (List<String> batch : batches) {
+            try {
+                String joined = String.join(",", batch);
+                List<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> results =
+                        brapiClient.fetchFiiIndicatorsBatch(joined);
+
+                for (BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo info : results) {
+                    if (info.symbol() == null || info.data() == null) continue;
+                    try {
+                        saveCurrent(info);
+                        synced.add(info.symbol());
+                    } catch (Exception e) {
+                        log.warn("Failed to save FII indicator for {}: {}", info.symbol(), e.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("FII batch sync failed for batch {}: {}", batch, e.getMessage());
+            }
+        }
+        return synced;
+    }
+
+    private void saveCurrent(BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo info) {
+        String symbol = info.symbol();
         BrapiFiiIndicatorsResponse.FiiIndicator d = info.data();
-        if (d == null) return;
 
         FiiIndicatorJpaEntity entity = indicatorRepo.findById(symbol)
                 .orElseGet(() -> { var e = new FiiIndicatorJpaEntity(); e.setSymbol(symbol); return e; });
@@ -104,7 +137,6 @@ public class FiiIndicatorSyncScheduler {
     }
 
     private void syncHistory(String symbol) {
-        // First sync: fetch full history from 2016. Subsequent: last 3 months.
         boolean firstSync = historyRepo.countBySymbol(symbol) == 0;
         String startDate = firstSync ? "2016-01-01" : LocalDate.now().minusMonths(3).toString();
 
@@ -112,17 +144,17 @@ public class FiiIndicatorSyncScheduler {
                 brapiClient.fetchFiiIndicatorsHistory(symbol, startDate, null);
         if (entries.isEmpty()) return;
 
-        // Collect existing dates to avoid duplicate inserts
-        java.util.Set<String> existingDates = historyRepo.findBySymbolOrderByReferenceDateAsc(symbol)
+        Set<String> existingDates = historyRepo.findBySymbolOrderByReferenceDateAsc(symbol)
                 .stream().map(FiiIndicatorHistoryJpaEntity::getReferenceDate)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
         Instant now = Instant.now();
         for (var e : entries) {
             if (e.referenceDate() == null) continue;
-            // Normalize to YYYY-MM-DD (brapi may return full ISO datetime)
-            String refDate = e.referenceDate().length() > 10 ? e.referenceDate().substring(0, 10) : e.referenceDate();
+            String refDate = e.referenceDate().length() > 10
+                    ? e.referenceDate().substring(0, 10) : e.referenceDate();
             if (existingDates.contains(refDate)) continue;
+
             var entity = new FiiIndicatorHistoryJpaEntity();
             entity.setSymbol(symbol);
             entity.setReferenceDate(refDate);
@@ -141,5 +173,13 @@ public class FiiIndicatorSyncScheduler {
             historyRepo.save(entity);
             existingDates.add(refDate);
         }
+    }
+
+    private static <T> List<List<T>> partition(List<T> list, int size) {
+        List<List<T>> result = new ArrayList<>();
+        for (int i = 0; i < list.size(); i += size) {
+            result.add(list.subList(i, Math.min(i + size, list.size())));
+        }
+        return result;
     }
 }

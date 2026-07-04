@@ -117,23 +117,30 @@ public class BrapiAnalysisClient {
         }
     }
 
+    /** Fetches current indicators for a single symbol (used by the API controller). */
     public Optional<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> fetchFiiIndicators(String symbol) {
+        List<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> list = fetchFiiIndicatorsBatch(symbol);
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
+    }
+
+    /** Fetches current indicators for up to 20 comma-separated symbols (used by the scheduler). */
+    public List<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> fetchFiiIndicatorsBatch(String symbols) {
         try {
             BrapiFiiIndicatorsResponse response = webClient.get()
                     .uri(u -> u.path("/api/v2/fii/indicators")
-                            .queryParam("symbols", symbol)
+                            .queryParam("symbols", symbols)
                             .build())
                     .retrieve()
                     .bodyToMono(BrapiFiiIndicatorsResponse.class)
                     .block();
 
-            if (response == null || response.fiis() == null || response.fiis().isEmpty()) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(response.fiis().get(0));
+            if (response == null || response.fiis() == null) return List.of();
+            return response.fiis().stream()
+                    .filter(f -> f != null && f.symbol() != null)
+                    .toList();
         } catch (Exception e) {
-            log.warn("Failed to fetch FII indicators for {}: {}", symbol, e.getMessage());
-            return Optional.empty();
+            log.warn("Failed to fetch FII indicators for [{}]: {}", symbols, e.getMessage());
+            return List.of();
         }
     }
 
