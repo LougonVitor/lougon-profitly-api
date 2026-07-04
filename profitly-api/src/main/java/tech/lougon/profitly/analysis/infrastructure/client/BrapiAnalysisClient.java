@@ -16,6 +16,8 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStatisticsRe
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryListResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryHistoryResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundListResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundDividendsResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -271,6 +273,42 @@ public class BrapiAnalysisClient {
             return response.treasuries().stream().filter(e -> e != null && e.referenceDate() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch treasury history for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<BrapiFundListResponse.FundItem> fetchFundList(String symbols) {
+        try {
+            BrapiFundListResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/funds/list")
+                            .queryParam("symbols", symbols)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFundListResponse.class)
+                    .block();
+            if (response == null || response.funds() == null) return List.of();
+            return response.funds().stream().filter(f -> f != null && f.symbol() != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch fund list for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<BrapiFundDividendsResponse.FundDividend> fetchFundDividends(String symbol) {
+        try {
+            BrapiFundDividendsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/funds/dividends")
+                            .queryParam("symbols", symbol)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFundDividendsResponse.class)
+                    .block();
+            if (response == null || response.dividends() == null) return List.of();
+            return response.dividends().stream()
+                    .filter(d -> d != null && symbol.equalsIgnoreCase(d.symbol()))
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch fund dividends for {}: {}", symbol, e.getMessage());
             return List.of();
         }
     }
