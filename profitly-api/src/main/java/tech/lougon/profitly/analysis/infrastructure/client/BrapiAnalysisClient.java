@@ -150,13 +150,11 @@ public class BrapiAnalysisClient {
         }
     }
 
-    /** Fetches FII list data for up to 20 comma-separated symbols via /api/v2/fii/list. */
-    public List<BrapiFiiListResponse.FiiListItem> fetchFiiList(String symbols) {
+    /** Fetches all FIIs from /api/v2/fii/list (no symbols filter — returns everything brapi has). */
+    public List<BrapiFiiListResponse.FiiListItem> fetchFiiList() {
         try {
             BrapiFiiListResponse response = webClient.get()
-                    .uri(u -> u.path("/api/v2/fii/list")
-                            .queryParam("symbols", symbols)
-                            .build())
+                    .uri("/api/v2/fii/list")
                     .retrieve()
                     .bodyToMono(BrapiFiiListResponse.class)
                     .block();
@@ -166,7 +164,7 @@ public class BrapiAnalysisClient {
                     .filter(f -> f != null && f.symbol() != null)
                     .toList();
         } catch (Exception e) {
-            log.warn("Failed to fetch FII list for [{}]: {}", symbols, e.getMessage());
+            log.warn("Failed to fetch FII list: {}", e.getMessage());
             return List.of();
         }
     }

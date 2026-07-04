@@ -19,10 +19,11 @@ import tech.lougon.profitly.analysis.infrastructure.persistence.JpaDividendEvent
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorRepository;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
+import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,7 +32,6 @@ import java.util.stream.Collectors;
 public class FiiIndicatorSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(FiiIndicatorSyncScheduler.class);
-    private static final int BATCH_SIZE = 20;
 
     private final JpaTickerRepository tickerRepo;
     private final JpaFiiIndicatorRepository indicatorRepo;
@@ -65,19 +65,29 @@ public class FiiIndicatorSyncScheduler {
     /** Nightly sync at 19:30, after main ticker sync (19:00). */
     @Scheduled(cron = "0 30 19 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
-        List<String> fiiSymbols = tickerRepo.findAll().stream()
-                .filter(t -> "FII".equalsIgnoreCase(t.getAssetType())
-                        || "FII".equalsIgnoreCase(t.getSubType()))
-                .map(t -> t.getSymbol())
-                .toList();
+        // Calling without ?symbols returns ALL FIIs that brapi has indexed
+        List<BrapiFiiListResponse.FiiListItem> allFiis = brapiClient.fetchFiiList();
+        if (allFiis.isEmpty()) {
+            log.warn("FII list returned 0 results — skipping FII sync");
+            return;
+        }
 
-        log.info("Syncing FII indicators for {} tickers in batches of {}", fiiSymbols.size(), BATCH_SIZE);
+        log.info("Syncing {} FIIs from brapi list", allFiis.size());
 
-        // Step 1: sync current indicators in batches
-        Set<String> synced = syncCurrentBatched(fiiSymbols);
+        Set<String> synced = new java.util.LinkedHashSet<>();
+        for (BrapiFiiListResponse.FiiListItem item : allFiis) {
+            if (item.symbol() == null) continue;
+            try {
+                saveCurrent(item);
+                upsertTicker(item);
+                synced.add(item.symbol());
+            } catch (Exception e) {
+                log.warn("Failed to save FII indicator for {}: {}", item.symbol(), e.getMessage());
+            }
+        }
 
-        // Step 2: sync history, dividends, and price history for symbols that returned data
-        log.info("Syncing FII history, dividends, and prices for {} tickers", synced.size());
+        log.info("FII indicators synced: {}/{} — syncing history, dividends, prices", synced.size(), allFiis.size());
+
         for (String symbol : synced) {
             try {
                 syncHistory(symbol);
@@ -96,33 +106,25 @@ public class FiiIndicatorSyncScheduler {
             }
         }
 
-        log.info("FII indicator sync complete: {}/{} tickers had indicator data", synced.size(), fiiSymbols.size());
+        log.info("FII sync complete: {}/{} tickers synced", synced.size(), allFiis.size());
     }
 
-    /** Fetches current indicators via /api/v2/fii/list in batches of 20. Returns symbols that had data. */
-    private Set<String> syncCurrentBatched(List<String> symbols) {
-        Set<String> synced = new java.util.LinkedHashSet<>();
-        List<List<String>> batches = partition(symbols, BATCH_SIZE);
+    private void upsertTicker(BrapiFiiListResponse.FiiListItem item) {
+        TickerJpaEntity ticker = tickerRepo.findBySymbol(item.symbol())
+                .orElseGet(TickerJpaEntity::new);
 
-        for (List<String> batch : batches) {
-            try {
-                String joined = String.join(",", batch);
-                List<BrapiFiiListResponse.FiiListItem> results = brapiClient.fetchFiiList(joined);
-
-                for (BrapiFiiListResponse.FiiListItem item : results) {
-                    if (item.symbol() == null) continue;
-                    try {
-                        saveCurrent(item);
-                        synced.add(item.symbol());
-                    } catch (Exception e) {
-                        log.warn("Failed to save FII indicator for {}: {}", item.symbol(), e.getMessage());
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("FII batch sync failed for batch {}: {}", batch, e.getMessage());
-            }
+        String name = item.name() != null ? item.name() : item.symbol();
+        ticker.setSymbol(item.symbol());
+        ticker.setName(name);
+        ticker.setLongName(name);
+        ticker.setAssetType("FII");
+        ticker.setSubType(item.segmentType());
+        ticker.setIsActive(true);
+        if (item.price() != null) {
+            ticker.setLastPrice(BigDecimal.valueOf(item.price()));
         }
-        return synced;
+        ticker.setSyncedAt(Instant.now());
+        tickerRepo.save(ticker);
     }
 
     private void saveCurrent(BrapiFiiListResponse.FiiListItem item) {
@@ -203,11 +205,4 @@ public class FiiIndicatorSyncScheduler {
         }
     }
 
-    private static <T> List<List<T>> partition(List<T> list, int size) {
-        List<List<T>> result = new ArrayList<>();
-        for (int i = 0; i < list.size(); i += size) {
-            result.add(list.subList(i, Math.min(i + size, list.size())));
-        }
-        return result;
-    }
 }
