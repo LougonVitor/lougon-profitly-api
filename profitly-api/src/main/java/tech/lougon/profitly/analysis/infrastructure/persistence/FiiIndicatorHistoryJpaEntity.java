@@ -15,7 +15,7 @@ public class FiiIndicatorHistoryJpaEntity {
     @Column(name = "symbol", nullable = false, length = 20)
     private String symbol;
 
-    @Column(name = "reference_date", nullable = false, length = 10)
+    @Column(name = "reference_date", nullable = false, length = 40)
     private String referenceDate;
 
     @Column(name = "price")

@@ -119,10 +119,13 @@ public class FiiIndicatorSyncScheduler {
 
         Instant now = Instant.now();
         for (var e : entries) {
-            if (e.referenceDate() == null || existingDates.contains(e.referenceDate())) continue;
+            if (e.referenceDate() == null) continue;
+            // Normalize to YYYY-MM-DD (brapi may return full ISO datetime)
+            String refDate = e.referenceDate().length() > 10 ? e.referenceDate().substring(0, 10) : e.referenceDate();
+            if (existingDates.contains(refDate)) continue;
             var entity = new FiiIndicatorHistoryJpaEntity();
             entity.setSymbol(symbol);
-            entity.setReferenceDate(e.referenceDate());
+            entity.setReferenceDate(refDate);
             entity.setPrice(e.price());
             entity.setNavPerShare(e.navPerShare());
             entity.setPriceToNav(e.priceToNav());
@@ -136,7 +139,7 @@ public class FiiIndicatorSyncScheduler {
             entity.setSegmentType(e.segmentType());
             entity.setSyncedAt(now);
             historyRepo.save(entity);
-            existingDates.add(e.referenceDate());
+            existingDates.add(refDate);
         }
     }
 }
