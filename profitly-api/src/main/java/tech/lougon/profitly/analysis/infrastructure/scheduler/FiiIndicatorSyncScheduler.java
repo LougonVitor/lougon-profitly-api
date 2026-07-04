@@ -55,14 +55,12 @@ public class FiiIndicatorSyncScheduler {
         this.analysisService = analysisService;
     }
 
-    /** Runs once after Spring context is fully ready (non-blocking). */
+    /** Runs once after Spring context is fully ready (non-blocking). Always syncs to ensure data is fresh. */
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void syncOnStartup() {
-        if (indicatorRepo.count() == 0) {
-            log.info("fii_indicators table is empty — running initial FII indicator sync");
-            syncAll();
-        }
+        log.info("Running FII indicator startup sync");
+        syncAll();
     }
 
     /** Nightly sync at 19:30, after main ticker sync (19:00). */

@@ -47,10 +47,8 @@ public class TreasurySyncScheduler {
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void syncOnStartup() {
-        if (bondRepo.count() == 0) {
-            log.info("treasury_bonds table is empty — running initial treasury sync");
-            syncAll();
-        }
+        log.info("Running treasury startup sync");
+        syncAll();
     }
 
     @Scheduled(cron = "0 45 19 * * *", zone = "America/Sao_Paulo")

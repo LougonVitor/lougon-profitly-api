@@ -46,10 +46,8 @@ public class FundSyncScheduler {
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void syncOnStartup() {
-        if (fundRepo.count() == 0) {
-            log.info("fund_indicators table is empty — running initial fund sync");
-            syncAll();
-        }
+        log.info("Running fund startup sync");
+        syncAll();
     }
 
     @Scheduled(cron = "0 40 19 * * *", zone = "America/Sao_Paulo")

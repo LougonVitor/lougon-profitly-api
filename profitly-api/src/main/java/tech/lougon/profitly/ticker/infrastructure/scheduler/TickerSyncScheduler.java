@@ -25,11 +25,9 @@ public class TickerSyncScheduler {
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void syncOnStartup() {
-        if (tickerRepo.count() == 0) {
-            log.info("tickers table is empty — running initial ticker sync");
-            tickerService.syncAll();
-            log.info("Initial ticker sync finished");
-        }
+        log.info("Running ticker startup sync");
+        tickerService.syncAll();
+        log.info("Ticker startup sync finished");
     }
 
     @Scheduled(cron = "0 0 19 * * *", zone = "America/Sao_Paulo")
