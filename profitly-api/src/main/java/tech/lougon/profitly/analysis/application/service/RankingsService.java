@@ -3,7 +3,9 @@ package tech.lougon.profitly.analysis.application.service;
 import org.springframework.stereotype.Service;
 import tech.lougon.profitly.analysis.application.dto.RankingItemDTO;
 import tech.lougon.profitly.analysis.application.dto.RankingsDTO;
+import tech.lougon.profitly.analysis.infrastructure.persistence.FiiIndicatorJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaDividendEventRepository;
+import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaTickerAnalysisRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.TickerAnalysisJpaEntity;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
@@ -22,16 +24,21 @@ public class RankingsService {
     private final JpaTickerRepository tickerRepo;
     private final JpaTickerAnalysisRepository analysisRepo;
     private final JpaDividendEventRepository dividendRepo;
+    private final JpaFiiIndicatorRepository fiiIndicatorRepo;
 
     public RankingsService(JpaTickerRepository tickerRepo,
                            JpaTickerAnalysisRepository analysisRepo,
-                           JpaDividendEventRepository dividendRepo) {
+                           JpaDividendEventRepository dividendRepo,
+                           JpaFiiIndicatorRepository fiiIndicatorRepo) {
         this.tickerRepo = tickerRepo;
         this.analysisRepo = analysisRepo;
         this.dividendRepo = dividendRepo;
+        this.fiiIndicatorRepo = fiiIndicatorRepo;
     }
 
     public RankingsDTO getRankings(String assetType) {
+        boolean isFii = "FII".equalsIgnoreCase(assetType);
+
         List<TickerJpaEntity> tickers = assetType == null || assetType.isBlank()
                 ? tickerRepo.findAll()
                 : tickerRepo.findByAssetTypeIgnoreCase(assetType);
@@ -39,16 +46,71 @@ public class RankingsService {
         Map<String, TickerJpaEntity> tickerMap = tickers.stream()
                 .collect(Collectors.toMap(TickerJpaEntity::getSymbol, t -> t, (a, b) -> a));
 
+        if (isFii) {
+            return buildFiiRankings(tickerMap);
+        }
+
+        return buildStockRankings(tickerMap);
+    }
+
+    private RankingsDTO buildFiiRankings(Map<String, TickerJpaEntity> tickerMap) {
+        // Use fii_indicators for FII-specific data
+        Map<String, FiiIndicatorJpaEntity> fiiMap = fiiIndicatorRepo.findAll().stream()
+                .filter(f -> tickerMap.containsKey(f.getSymbol()))
+                .collect(Collectors.toMap(FiiIndicatorJpaEntity::getSymbol, f -> f, (a, b) -> a));
+
+        // Minimum equity (patrimônio) of R$50M for FIIs
+        double minEquity = 50_000_000.0;
+
+        // 1. Dividend Yield 12m — ranked by DY12m
+        List<RankingItemDTO> dividendYield = fiiMap.values().stream()
+                .filter(f -> f.getDividendYield12m() != null && f.getDividendYield12m() > 0
+                        && f.getDividendYield12m() < 50     // sanity: < 50% DY
+                        && f.getEquity() != null && f.getEquity() >= minEquity)
+                .sorted(Comparator.comparingDouble(f -> -f.getDividendYield12m()))
+                .limit(5)
+                .map(f -> {
+                    var t = tickerMap.get(f.getSymbol());
+                    return new RankingItemDTO(t.getSymbol(), t.getName(), t.getLogoUrl(),
+                            f.getDividendYield12m());
+                })
+                .toList();
+
+        // 2. Maiores patrimônios (equity)
+        List<RankingItemDTO> marketCap = fiiMap.values().stream()
+                .filter(f -> f.getEquity() != null && f.getEquity() >= minEquity)
+                .sorted(Comparator.comparingDouble(f -> -f.getEquity()))
+                .limit(5)
+                .map(f -> {
+                    var t = tickerMap.get(f.getSymbol());
+                    return new RankingItemDTO(t.getSymbol(), t.getName(), t.getLogoUrl(),
+                            f.getEquity());
+                })
+                .toList();
+
+        // 3. Mais cotistas (totalInvestors)
+        List<RankingItemDTO> revenue = fiiMap.values().stream()
+                .filter(f -> f.getTotalInvestors() != null && f.getTotalInvestors() > 0
+                        && f.getEquity() != null && f.getEquity() >= minEquity)
+                .sorted(Comparator.comparingLong(f -> -f.getTotalInvestors()))
+                .limit(5)
+                .map(f -> {
+                    var t = tickerMap.get(f.getSymbol());
+                    return new RankingItemDTO(t.getSymbol(), t.getName(), t.getLogoUrl(),
+                            f.getTotalInvestors().doubleValue());
+                })
+                .toList();
+
+        return new RankingsDTO(dividendYield, marketCap, revenue);
+    }
+
+    private RankingsDTO buildStockRankings(Map<String, TickerJpaEntity> tickerMap) {
         Map<String, TickerAnalysisJpaEntity> analysisMap = analysisRepo.findBySymbolIn(tickerMap.keySet()).stream()
                 .collect(Collectors.toMap(TickerAnalysisJpaEntity::getSymbol, a -> a, (a, b) -> a));
 
-        // Liquidity floor: ignore micro-caps with no real market presence.
-        long minMarketCap = 500_000_000L;         // R$ 500 million
-        // Sanity ceiling: above R$ 2 trillion is a brapi data error.
+        long minMarketCap = 500_000_000L;
         long maxMarketCap = 2_000_000_000_000L;
 
-        // Dividend ranking: average DY% over available years from dividend_events history.
-        // Minimum 3 years of payment history required; displayed as a percentage like the analysis page.
         Map<String, Double> avgDyBySymbol = computeAvgDividendYield(analysisMap, 3);
 
         List<RankingItemDTO> dividendYield = deduplicateByName(
@@ -92,23 +154,14 @@ public class RankingsService {
         return new RankingsDTO(dividendYield, marketCap, revenue);
     }
 
-    /**
-     * Returns a map of symbol → dividendYield value (from ticker_analysis) for symbols
-     * that have at least minYears distinct years of dividend payments in dividend_events.
-     * This filters out one-off payers while displaying the DY% the analysis page shows.
-     */
     private Map<String, Double> computeAvgDividendYield(
             Map<String, TickerAnalysisJpaEntity> analysisMap, int minYears) {
-
-        // Count distinct years per symbol from dividend_events
         List<Object[]> rows = dividendRepo.sumBySymbolAndYear();
         Map<String, Long> yearCountBySymbol = new HashMap<>();
         for (Object[] row : rows) {
             String symbol = (String) row[0];
             yearCountBySymbol.merge(symbol, 1L, Long::sum);
         }
-
-        // Keep only symbols with enough history and a valid DY
         Map<String, Double> result = new HashMap<>();
         for (Map.Entry<String, Long> entry : yearCountBySymbol.entrySet()) {
             if (entry.getValue() < minYears) continue;
@@ -125,8 +178,6 @@ public class RankingsService {
             Map<String, TickerJpaEntity> tickerMap,
             java.util.function.Function<TickerAnalysisJpaEntity, Double> valueExtractor
     ) {
-        // Deduplicate by ticker prefix (strip trailing digits: PETR3/PETR4 → PETR).
-        // List is pre-sorted descending so first occurrence is always the best value.
         java.util.Set<String> seenPrefixes = new java.util.LinkedHashSet<>();
         return sorted.stream()
                 .filter(a -> {

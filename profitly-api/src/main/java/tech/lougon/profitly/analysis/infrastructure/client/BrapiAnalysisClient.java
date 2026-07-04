@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFinancialDataResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiHistoricalResponse;
@@ -111,6 +113,51 @@ public class BrapiAnalysisClient {
             return data.cashDividends();
         } catch (Exception e) {
             log.warn("Failed to fetch dividends for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public Optional<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> fetchFiiIndicators(String symbol) {
+        try {
+            BrapiFiiIndicatorsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/fii/indicators")
+                            .queryParam("symbols", symbol)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFiiIndicatorsResponse.class)
+                    .block();
+
+            if (response == null || response.fiis() == null || response.fiis().isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(response.fiis().get(0));
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII indicators for {}: {}", symbol, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    public List<BrapiFiiIndicatorsHistoryResponse.FiiHistoryEntry> fetchFiiIndicatorsHistory(
+            String symbol, String startDate, String endDate) {
+        try {
+            BrapiFiiIndicatorsHistoryResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/fii/indicators/history")
+                                .queryParam("symbols", symbol);
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        if (endDate   != null) b = b.queryParam("endDate",   endDate);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiFiiIndicatorsHistoryResponse.class)
+                    .block();
+
+            if (response == null || response.history() == null) return List.of();
+            return response.history().stream()
+                    .filter(e -> symbol.equalsIgnoreCase(e.symbol()))
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII indicator history for {}: {}", symbol, e.getMessage());
             return List.of();
         }
     }
