@@ -47,6 +47,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/fii/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/treasury/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/funds/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/crypto/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class)

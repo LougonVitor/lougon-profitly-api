@@ -17,6 +17,8 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryList
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundListResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoAvailableResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -299,6 +301,41 @@ public class BrapiAnalysisClient {
             return response.funds().stream().filter(f -> f != null && f.symbol() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch fund list for assetType={}: {}", assetType, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Fetches all available coin symbols from /api/v2/crypto/available. */
+    public List<String> fetchCryptoAvailable() {
+        try {
+            BrapiCryptoAvailableResponse response = webClient.get()
+                    .uri("/api/v2/crypto/available")
+                    .retrieve()
+                    .bodyToMono(BrapiCryptoAvailableResponse.class)
+                    .block();
+            if (response == null || response.coins() == null) return List.of();
+            return response.coins().stream().filter(c -> c != null && !c.isBlank()).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch available crypto coins: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Fetches BRL quotes for comma-separated coin symbols via /api/v2/crypto. */
+    public List<BrapiCryptoResponse.CryptoQuote> fetchCryptoQuotes(String coins) {
+        try {
+            BrapiCryptoResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/crypto")
+                            .queryParam("coin", coins)
+                            .queryParam("currency", "BRL")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiCryptoResponse.class)
+                    .block();
+            if (response == null || response.coins() == null) return List.of();
+            return response.coins().stream().filter(c -> c != null && c.coin() != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch crypto quotes for [{}]: {}", coins, e.getMessage());
             return List.of();
         }
     }

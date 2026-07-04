@@ -259,39 +259,40 @@ class BrapiDtoParseTest {
 
     @Test
     void fundList_parsesAllFundTypes() throws Exception {
-        // brapi /api/v2/funds/list uses "results" as root key (same pattern as treasury/list)
+        // brapi /api/v2/funds/list uses "funds" as root key
         String json = """
                 {
-                  "results": [
+                  "funds": [
                     {
-                      "symbol": "CPFF11",
-                      "name": "CPF Fundo de Fundos FIAGRO",
-                      "type": "FIAGRO",
-                      "price": 9.80,
-                      "dividendYield12m": 14.2,
-                      "dividendYield1m": 1.1,
-                      "priceToNav": 0.95,
-                      "navPerShare": 10.32,
-                      "totalInvestors": 50000,
-                      "administratorName": "Itaú Unibanco",
-                      "administratorCnpj": "60.701.190/0001-04",
-                      "segmentType": "agro"
+                      "symbol": "JURO11",
+                      "cnpj": "42730834000100",
+                      "name": "SPARTA INFRA",
+                      "legalName": "SPARTA INFRA FIC FI INFRA RENDA FIXA CP",
+                      "assetType": "fiinfra",
+                      "b3Classification": "Financeiro/Fundos/FI-INFRA",
+                      "price": 96.99,
+                      "navPerShare": 99.19945,
+                      "priceToNav": 0.9777272,
+                      "equity": 2040699000,
+                      "totalAssets": 2041704100,
+                      "totalInvestors": 92710
                     }
-                  ]
+                  ],
+                  "pagination": { "page": 1, "totalItems": 1, "totalPages": 1, "hasNextPage": false }
                 }
                 """;
 
         BrapiFundListResponse response = mapper.readValue(json, BrapiFundListResponse.class);
 
-        assertThat(response.results()).hasSize(1);
-        BrapiFundListResponse.FundItem item = response.results().get(0);
-        assertThat(item.symbol()).isEqualTo("CPFF11");
-        assertThat(item.type()).isEqualTo("FIAGRO");
-        assertThat(item.price()).isEqualTo(9.80);
-        assertThat(item.dividendYield12m()).isEqualTo(14.2);
-        assertThat(item.priceToNav()).isEqualTo(0.95);
-        assertThat(item.totalInvestors().longValue()).isEqualTo(50_000L);
-        assertThat(item.administratorName()).isEqualTo("Itaú Unibanco");
+        assertThat(response.funds()).hasSize(1);
+        BrapiFundListResponse.FundItem item = response.funds().get(0);
+        assertThat(item.symbol()).isEqualTo("JURO11");
+        assertThat(item.assetType()).isEqualTo("fiinfra");
+        assertThat(item.price()).isEqualTo(96.99);
+        assertThat(item.priceToNav()).isEqualTo(0.9777272);
+        assertThat(item.equity()).isEqualTo(2040699000.0);
+        assertThat(item.totalInvestors().longValue()).isEqualTo(92_710L);
+        assertThat(item.legalName()).isEqualTo("SPARTA INFRA FIC FI INFRA RENDA FIXA CP");
     }
 
     @Test
