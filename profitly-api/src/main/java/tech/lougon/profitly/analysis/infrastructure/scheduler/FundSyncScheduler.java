@@ -27,8 +27,11 @@ public class FundSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(FundSyncScheduler.class);
 
-    /** assetTypes fetched from the dedicated funds endpoint. FIIs come from /fii/list. */
-    private static final List<String> ASSET_TYPES = List.of("fiagro", "fiinfra", "fidc", "fip");
+    /**
+     * assetTypes fetched from the dedicated funds endpoint. FIIs come from /fii/list;
+     * fidc and fip return nothing here, so they come from /api/v2/tickers?subType=... instead.
+     */
+    private static final List<String> ASSET_TYPES = List.of("fiagro", "fiinfra");
 
     private final BrapiAnalysisClient brapiClient;
     private final JpaFundIndicatorRepository fundRepo;

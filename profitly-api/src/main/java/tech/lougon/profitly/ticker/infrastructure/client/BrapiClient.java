@@ -18,11 +18,11 @@ public class BrapiClient {
     private static final int PAGE_SIZE = 2000;
 
     /**
-     * Only these subTypes come from the general /api/v2/tickers endpoint.
-     * FIIs, funds (fiagro/fidc/fip/fi-infra), treasury and crypto have their
-     * own dedicated list endpoints and are synced by their own schedulers.
+     * SubTypes fetched from the general /api/v2/tickers endpoint.
+     * FIIs, fiagro/fi-infra funds, treasury and crypto have dedicated list endpoints;
+     * fidc and fip come from here because /api/v2/funds/list returns nothing for them.
      */
-    private static final List<String> GENERAL_SUB_TYPES = List.of("stock", "unit", "bdr");
+    private static final List<String> GENERAL_SUB_TYPES = List.of("stock", "unit", "bdr", "fidc", "fip");
 
     private final WebClient webClient;
 
