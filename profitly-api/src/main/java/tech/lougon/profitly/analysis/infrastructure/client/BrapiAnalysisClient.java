@@ -19,6 +19,9 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryHist
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundListResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoAvailableResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockQuoteResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockProfileResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockStatementsResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -301,6 +304,128 @@ public class BrapiAnalysisClient {
             return response.funds().stream().filter(f -> f != null && f.symbol() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch fund list for assetType={}: {}", assetType, e.getMessage());
+            return List.of();
+        }
+    }
+
+    // ── Stock batch endpoints (comma-separated symbols) ─────────────────────
+
+    /** Fetches current quotes for comma-separated symbols via /api/v2/stocks/quote. */
+    public List<BrapiStockQuoteResponse.Result> fetchStockQuotes(String symbols) {
+        try {
+            BrapiStockQuoteResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/quote").queryParam("symbols", symbols).build())
+                    .retrieve()
+                    .bodyToMono(BrapiStockQuoteResponse.class)
+                    .block();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.data() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch stock quotes for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Fetches company profiles for comma-separated symbols via /api/v2/stocks/profile. */
+    public List<BrapiStockProfileResponse.Result> fetchStockProfiles(String symbols) {
+        try {
+            BrapiStockProfileResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/profile").queryParam("symbols", symbols).build())
+                    .retrieve()
+                    .bodyToMono(BrapiStockProfileResponse.class)
+                    .block();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.data() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch stock profiles for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Fetches current statistics for comma-separated symbols via /api/v2/stocks/statistics. */
+    public List<BrapiStatisticsResponse.Result> fetchStatisticsBatch(String symbols) {
+        try {
+            BrapiStatisticsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/statistics")
+                            .queryParam("symbols", symbols)
+                            .queryParam("mode", "current")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiStatisticsResponse.class)
+                    .block();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.data() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch statistics for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Fetches current financial data for comma-separated symbols via /api/v2/stocks/financial-data. */
+    public List<BrapiFinancialDataResponse.Result> fetchFinancialDataBatch(String symbols) {
+        try {
+            BrapiFinancialDataResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/financial-data")
+                            .queryParam("symbols", symbols)
+                            .queryParam("mode", "current")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFinancialDataResponse.class)
+                    .block();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.data() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch financial data for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Fetches cash dividends for comma-separated symbols via /api/v2/stocks/dividends. */
+    public List<BrapiDividendsResponse.Result> fetchDividendsBatch(String symbols) {
+        try {
+            BrapiDividendsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/dividends").queryParam("symbols", symbols).build())
+                    .retrieve()
+                    .bodyToMono(BrapiDividendsResponse.class)
+                    .block();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.data() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch dividends for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Fetches financial statements for comma-separated symbols.
+     * endpoint: "balance-sheet" | "income-statement" | "cash-flow" | "value-added".
+     * Rows come back as raw JSON nodes so every field is preserved.
+     */
+    public List<BrapiStockStatementsResponse.Result> fetchStatements(String endpoint, String symbols) {
+        try {
+            BrapiStockStatementsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/" + endpoint)
+                            .queryParam("symbols", symbols)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiStockStatementsResponse.class)
+                    .block();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.data() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch {} for [{}]: {}", endpoint, symbols, e.getMessage());
             return List.of();
         }
     }

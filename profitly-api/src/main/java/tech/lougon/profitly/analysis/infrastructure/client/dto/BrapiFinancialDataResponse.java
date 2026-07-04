@@ -36,6 +36,10 @@ public record BrapiFinancialDataResponse(
             @JsonProperty("grossProfits")          Long grossProfits,
             @JsonProperty("ebitda")                Long ebitda,
             @JsonProperty("freeCashflow")          Long freeCashflow,
-            @JsonProperty("operatingCashflow")     Long operatingCashflow
+            @JsonProperty("operatingCashflow")     Long operatingCashflow,
+            @JsonProperty("totalCashPerShare")     BigDecimal totalCashPerShare,
+            @JsonProperty("ebitdaMargins")         BigDecimal ebitdaMargins,
+            @JsonProperty("earningsGrowthAnnual")  BigDecimal earningsGrowthAnnual,
+            @JsonProperty("revenueGrowthAnnual")   BigDecimal revenueGrowthAnnual
     ) {}
 }

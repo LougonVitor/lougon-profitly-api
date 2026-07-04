@@ -345,4 +345,119 @@ class BrapiDtoParseTest {
         assertThat(response.fiis().stream()
                 .allMatch(f -> f.price() != null && f.dividendYield12m() != null)).isTrue();
     }
+
+    // ── Stock endpoints ────────────────────────────────────────────────────────
+
+    @Test
+    void stockQuote_parsesQuoteData() throws Exception {
+        String json = """
+                {
+                  "results": [
+                    {
+                      "requestedSymbol": "PETR4",
+                      "symbol": "PETR4",
+                      "data": {
+                        "shortName": "PETROBRAS   PN  EX  N2",
+                        "longName": "Petróleo Brasileiro S.A. - Petrobras",
+                        "currency": "BRL",
+                        "regularMarketPrice": 41.18,
+                        "regularMarketDayHigh": 41.53,
+                        "regularMarketDayLow": 40.82,
+                        "regularMarketChange": -0.58,
+                        "regularMarketChangePercent": -1.39,
+                        "regularMarketTime": "2026-06-14T05:15:42.000Z",
+                        "marketCap": null,
+                        "regularMarketVolume": 34024700,
+                        "regularMarketPreviousClose": 41.76,
+                        "regularMarketOpen": 41.18,
+                        "fiftyTwoWeekLow": 29.31,
+                        "fiftyTwoWeekHigh": 50.69,
+                        "logourl": "https://icons.brapi.dev/icons/PETR4.svg"
+                      }
+                    }
+                  ]
+                }
+                """;
+
+        BrapiStockQuoteResponse response = mapper.readValue(json, BrapiStockQuoteResponse.class);
+
+        assertThat(response.results()).hasSize(1);
+        var data = response.results().get(0).data();
+        assertThat(response.results().get(0).symbol()).isEqualTo("PETR4");
+        assertThat(data.regularMarketPrice()).isEqualTo(41.18);
+        assertThat(data.fiftyTwoWeekHigh()).isEqualTo(50.69);
+        assertThat(data.logoUrl()).contains("PETR4.svg");
+        assertThat(data.regularMarketTime()).isEqualTo("2026-06-14T05:15:42.000Z");
+    }
+
+    @Test
+    void stockProfile_parsesSectorAndCompanyInfo() throws Exception {
+        String json = """
+                {
+                  "results": [
+                    {
+                      "requestedSymbol": "VVAR3",
+                      "symbol": "BHIA3",
+                      "changed": true,
+                      "data": {
+                        "city": "SÃO PAULO",
+                        "state": "SP",
+                        "website": "https://ri.grupocasasbahia.com.br",
+                        "industry": "Eletrodomésticos",
+                        "industryKey": "eletrodomesticos",
+                        "sector": "Consumo Cíclico",
+                        "sectorKey": "consumo-ciclico",
+                        "longBusinessSummary": "O Grupo Casas Bahia S.A...",
+                        "fullTimeEmployees": 57500,
+                        "cnpj": "33041260065290",
+                        "logoUrl": "https://icons.brapi.dev/icons/BHIA3.svg"
+                      }
+                    }
+                  ]
+                }
+                """;
+
+        BrapiStockProfileResponse response = mapper.readValue(json, BrapiStockProfileResponse.class);
+
+        assertThat(response.results()).hasSize(1);
+        var r = response.results().get(0);
+        assertThat(r.symbol()).isEqualTo("BHIA3");
+        assertThat(r.data().sector()).isEqualTo("Consumo Cíclico");
+        assertThat(r.data().industry()).isEqualTo("Eletrodomésticos");
+        assertThat(r.data().fullTimeEmployees()).isEqualTo(57500L);
+        assertThat(r.data().cnpj()).isEqualTo("33041260065290");
+    }
+
+    @Test
+    void stockStatements_preservesAllFieldsAsRawJson() throws Exception {
+        String json = """
+                {
+                  "results": [
+                    {
+                      "requestedSymbol": "PETR4",
+                      "symbol": "PETR4",
+                      "data": [
+                        {
+                          "type": "yearly",
+                          "endDate": "2025-12-31",
+                          "totalRevenue": 497549000000,
+                          "netIncome": 110605000000,
+                          "someFutureField": "must survive"
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """;
+
+        BrapiStockStatementsResponse response = mapper.readValue(json, BrapiStockStatementsResponse.class);
+
+        assertThat(response.results()).hasSize(1);
+        var row = response.results().get(0).data().get(0);
+        assertThat(row.get("endDate").asText()).isEqualTo("2025-12-31");
+        assertThat(row.get("type").asText()).isEqualTo("yearly");
+        assertThat(row.get("netIncome").asLong()).isEqualTo(110605000000L);
+        // raw JSON keeps unknown fields — nothing is lost when brapi adds columns
+        assertThat(row.get("someFutureField").asText()).isEqualTo("must survive");
+    }
 }

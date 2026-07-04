@@ -166,6 +166,18 @@ public class AnalysisService {
     }
 
 
+    /** Saves statistics + financial-data as a TickerAnalysis row (used by the stock sync scheduler). */
+    public TickerAnalysis saveIndicators(String symbol,
+                                         BrapiStatisticsResponse.Data statsData,
+                                         BrapiFinancialDataResponse.Data financialData) {
+        return buildAndSave(symbol, statsData, financialData);
+    }
+
+    /** Annual DY% (sum of dividends / average close in the year × 100) for a symbol. */
+    public Map<Integer, Double> getHistoricalDyByYear(String symbol) {
+        return computeHistoricalDyByYear(symbol, dividendRepository.findBySymbol(symbol));
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private TickerAnalysis buildAndSave(String symbol,
