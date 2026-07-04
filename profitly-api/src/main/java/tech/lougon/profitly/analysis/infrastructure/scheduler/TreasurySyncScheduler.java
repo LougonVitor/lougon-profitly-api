@@ -100,7 +100,11 @@ public class TreasurySyncScheduler {
         TickerJpaEntity ticker = tickerRepo.findBySymbol(item.symbol())
                 .orElseGet(TickerJpaEntity::new);
 
+        // e.g. "Tesouro IPCA+ 2029" — maturity year makes bonds distinguishable in search
         String name = item.bondType() != null ? item.bondType() : item.symbol();
+        if (item.bondType() != null && item.maturityDate() != null && item.maturityDate().length() >= 4) {
+            name = item.bondType() + " " + item.maturityDate().substring(0, 4);
+        }
         // sub_type column is varchar(30) — store only the indexer code (e.g. "ipca", "selic")
         String subType = item.indexer() != null ? item.indexer() : null;
 
