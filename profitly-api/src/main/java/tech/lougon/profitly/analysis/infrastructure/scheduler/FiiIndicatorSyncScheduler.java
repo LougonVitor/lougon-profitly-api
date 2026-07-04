@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tech.lougon.profitly.analysis.application.service.AnalysisService;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
@@ -38,17 +39,20 @@ public class FiiIndicatorSyncScheduler {
     private final JpaFiiIndicatorHistoryRepository historyRepo;
     private final JpaDividendEventRepository dividendRepo;
     private final BrapiAnalysisClient brapiClient;
+    private final AnalysisService analysisService;
 
     public FiiIndicatorSyncScheduler(JpaTickerRepository tickerRepo,
                                      JpaFiiIndicatorRepository indicatorRepo,
                                      JpaFiiIndicatorHistoryRepository historyRepo,
                                      JpaDividendEventRepository dividendRepo,
-                                     BrapiAnalysisClient brapiClient) {
+                                     BrapiAnalysisClient brapiClient,
+                                     AnalysisService analysisService) {
         this.tickerRepo = tickerRepo;
         this.indicatorRepo = indicatorRepo;
         this.historyRepo = historyRepo;
         this.dividendRepo = dividendRepo;
         this.brapiClient = brapiClient;
+        this.analysisService = analysisService;
     }
 
     /** Runs once after Spring context is fully ready (non-blocking). */
@@ -75,18 +79,23 @@ public class FiiIndicatorSyncScheduler {
         // Step 1: sync current indicators in batches
         Set<String> synced = syncCurrentBatched(fiiSymbols);
 
-        // Step 2: sync history and dividends only for symbols that returned data
-        log.info("Syncing FII indicator history and dividends for {} tickers", synced.size());
+        // Step 2: sync history, dividends, and price history for symbols that returned data
+        log.info("Syncing FII history, dividends, and prices for {} tickers", synced.size());
         for (String symbol : synced) {
             try {
                 syncHistory(symbol);
             } catch (Exception e) {
-                log.warn("FII history sync failed for {}: {}", symbol, e.getMessage());
+                log.warn("FII indicator history sync failed for {}: {}", symbol, e.getMessage());
             }
             try {
                 syncDividends(symbol);
             } catch (Exception e) {
                 log.warn("FII dividend sync failed for {}: {}", symbol, e.getMessage());
+            }
+            try {
+                analysisService.syncPriceHistory(symbol);
+            } catch (Exception e) {
+                log.warn("FII price history sync failed for {}: {}", symbol, e.getMessage());
             }
         }
 

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiDividendsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiHistoricalResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiListResponse;
@@ -66,6 +67,31 @@ public class BrapiAnalysisClient {
         } catch (Exception e) {
             log.warn("Failed to fetch financial-data for {}: {}", symbol, e.getMessage());
             return Optional.empty();
+        }
+    }
+
+    /** Fetches FII daily OHLCV history from /api/v2/fii/historical. */
+    public List<BrapiFiiHistoricalResponse.PriceBar> fetchFiiHistory(String symbol, String range) {
+        try {
+            BrapiFiiHistoricalResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/fii/historical")
+                                .queryParam("symbols", symbol);
+                        if (range != null && !range.equals("max")) b = b.queryParam("range", range);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiFiiHistoricalResponse.class)
+                    .block();
+
+            if (response == null || response.fiis() == null || response.fiis().isEmpty()) {
+                return List.of();
+            }
+            var bars = response.fiis().get(0).historicalDataPrice();
+            return bars != null ? bars : List.of();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII history for {}: {}", symbol, e.getMessage());
+            return List.of();
         }
     }
 

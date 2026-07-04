@@ -116,9 +116,15 @@ public class AnalysisService {
 
     public void syncPriceHistory(String symbol) {
         log.info("Syncing price history for {}", symbol);
-        var bars = brapiClient.fetchHistory(symbol, "max");
-        if (!bars.isEmpty()) {
-            List<PricePoint> points = bars.stream()
+
+        boolean isFii = tickerService.findBySymbol(symbol)
+                .map(t -> "FII".equalsIgnoreCase(t.assetType()) || "FII".equalsIgnoreCase(t.subType()))
+                .orElse(false);
+
+        List<PricePoint> points;
+        if (isFii) {
+            var bars = brapiClient.fetchFiiHistory(symbol, "max");
+            points = bars.stream()
                     .filter(b -> b.date() != null && b.close() != null)
                     .map(b -> new PricePoint(
                             symbol,
@@ -131,6 +137,23 @@ public class AnalysisService {
                             b.volume()
                     ))
                     .toList();
+        } else {
+            var bars = brapiClient.fetchHistory(symbol, "max");
+            points = bars.stream()
+                    .filter(b -> b.date() != null && b.close() != null)
+                    .map(b -> new PricePoint(
+                            symbol,
+                            Instant.ofEpochSecond(b.date()).atZone(ZoneOffset.UTC).toLocalDate(),
+                            b.open() != null ? BigDecimal.valueOf(b.open()) : null,
+                            b.high() != null ? BigDecimal.valueOf(b.high()) : null,
+                            b.low() != null ? BigDecimal.valueOf(b.low()) : null,
+                            BigDecimal.valueOf(b.close()),
+                            b.adjustedClose() != null ? BigDecimal.valueOf(b.adjustedClose()) : null,
+                            b.volume()
+                    ))
+                    .toList();
+        }
+        if (!points.isEmpty()) {
             priceHistoryRepository.saveAll(points);
         }
     }
