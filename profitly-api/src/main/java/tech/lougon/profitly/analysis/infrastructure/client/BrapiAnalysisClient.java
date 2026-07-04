@@ -413,6 +413,17 @@ public class BrapiAnalysisClient {
                 out.addAll(fetchDividendsBatch(String.join(",", java.util.Arrays.copyOfRange(parts, mid, parts.length))));
                 return out;
             }
+            // brapi wrongly flags units ending in "11" (SANB11, ENGI11, BPAC11...) as FIIs
+            // and returns 400 FII_DIVIDENDS_MISUSE — fall back to the FII dividends endpoint
+            List<BrapiFiiDividendsResponse.FiiDividend> fiiDividends = fetchFiiDividends(symbols);
+            if (!fiiDividends.isEmpty()) {
+                List<BrapiDividendsResponse.CashDividend> cash = fiiDividends.stream()
+                        .map(d -> new BrapiDividendsResponse.CashDividend(
+                                null, d.paymentDate(), d.rate(), d.relatedTo(),
+                                d.approvedOn(), d.isinCode(), d.label(), d.lastDatePrior(), d.remarks()))
+                        .toList();
+                return List.of(new BrapiDividendsResponse.Result(symbols, new BrapiDividendsResponse.Data(cash)));
+            }
             log.warn("Failed to fetch dividends for [{}]: {}", symbols, e.getMessage());
             return List.of();
         }
