@@ -113,11 +113,14 @@ public class TreasurySyncScheduler {
                 .orElseGet(TickerJpaEntity::new);
 
         String name = item.bondType() != null ? item.bondType() : item.symbol();
+        // sub_type column is varchar(30) — store only the indexer code (e.g. "ipca", "selic")
+        String subType = item.indexer() != null ? item.indexer() : null;
+
         ticker.setSymbol(item.symbol());
         ticker.setName(name);
         ticker.setLongName(name);
         ticker.setAssetType("treasury");
-        ticker.setSubType(item.bondType());
+        ticker.setSubType(subType);
         ticker.setIsActive(true);
         if (item.buyPrice() != null) {
             ticker.setLastPrice(BigDecimal.valueOf(item.buyPrice()));

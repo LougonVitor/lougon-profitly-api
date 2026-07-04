@@ -1,11 +1,13 @@
 package tech.lougon.profitly.analysis.infrastructure.client.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record BrapiFundListResponse(List<FundItem> results) {
-
+public record BrapiFundListResponse(
+        @JsonAlias({"results", "fiagros", "funds", "fiis"}) List<FundItem> results
+) {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record FundItem(
             String symbol,

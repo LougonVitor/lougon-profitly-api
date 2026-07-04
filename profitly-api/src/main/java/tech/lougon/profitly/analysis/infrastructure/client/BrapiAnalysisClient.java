@@ -277,11 +277,12 @@ public class BrapiAnalysisClient {
         }
     }
 
+    /** Fetches FIAGRO funds from brapi. Note: brapi uses /api/v2/fiagro/list (same pattern as /fii/list). */
     public List<BrapiFundListResponse.FundItem> fetchFundList(String symbols) {
         try {
             BrapiFundListResponse response = webClient.get()
                     .uri(u -> {
-                        var b = u.path("/api/v2/funds/list");
+                        var b = u.path("/api/v2/fiagro/list");
                         if (symbols != null && !symbols.isBlank()) b = b.queryParam("symbols", symbols);
                         return b.build();
                     })
@@ -291,7 +292,7 @@ public class BrapiAnalysisClient {
             if (response == null || response.results() == null) return List.of();
             return response.results().stream().filter(f -> f != null && f.symbol() != null).toList();
         } catch (Exception e) {
-            log.warn("Failed to fetch fund list for [{}]: {}", symbols, e.getMessage());
+            log.warn("Failed to fetch fund list: {}", e.getMessage());
             return List.of();
         }
     }
@@ -299,7 +300,7 @@ public class BrapiAnalysisClient {
     public List<BrapiFundDividendsResponse.FundDividend> fetchFundDividends(String symbol) {
         try {
             BrapiFundDividendsResponse response = webClient.get()
-                    .uri(u -> u.path("/api/v2/funds/dividends")
+                    .uri(u -> u.path("/api/v2/fiagro/dividends")
                             .queryParam("symbols", symbol)
                             .build())
                     .retrieve()

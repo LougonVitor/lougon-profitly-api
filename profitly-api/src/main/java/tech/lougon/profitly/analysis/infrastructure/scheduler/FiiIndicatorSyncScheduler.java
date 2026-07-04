@@ -7,7 +7,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import tech.lougon.profitly.analysis.application.service.AnalysisService;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiDividendsResponse;
@@ -183,13 +182,12 @@ public class FiiIndicatorSyncScheduler {
         }
     }
 
-    @Transactional
     void syncDividends(String symbol) {
         List<BrapiFiiDividendsResponse.FiiDividend> dividends = brapiClient.fetchFiiDividends(symbol);
         if (dividends.isEmpty()) return;
 
-        // Replace all dividends for this symbol (same strategy as stock dividend sync)
-        dividendRepo.deleteBySymbol(symbol);
+        // deleteAll(entities) works without @Modifying transaction — avoids self-invocation proxy issue
+        dividendRepo.deleteAll(dividendRepo.findBySymbolOrderByLastDatePriorDesc(symbol));
 
         for (var d : dividends) {
             var entity = new DividendEventJpaEntity();

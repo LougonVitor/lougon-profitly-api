@@ -1,9 +1,11 @@
 package tech.lougon.profitly.analysis.infrastructure.client.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import java.util.List;
 
-public record BrapiFiiListResponse(List<FiiListItem> fiis) {
-
+public record BrapiFiiListResponse(
+        @JsonAlias({"fiis", "results"}) List<FiiListItem> fiis
+) {
     public record FiiListItem(
             String symbol,
             String name,

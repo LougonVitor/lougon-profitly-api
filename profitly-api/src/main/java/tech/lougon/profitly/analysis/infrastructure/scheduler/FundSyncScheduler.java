@@ -7,7 +7,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundListResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundDividendsResponse;
@@ -128,12 +127,11 @@ public class FundSyncScheduler {
         tickerRepo.save(ticker);
     }
 
-    @Transactional
     void syncDividends(String symbol) {
         List<BrapiFundDividendsResponse.FundDividend> dividends = brapiClient.fetchFundDividends(symbol);
         if (dividends.isEmpty()) return;
 
-        dividendRepo.deleteBySymbol(symbol);
+        dividendRepo.deleteAll(dividendRepo.findBySymbolOrderByLastDatePriorDesc(symbol));
 
         for (var d : dividends) {
             var entity = new DividendEventJpaEntity();
