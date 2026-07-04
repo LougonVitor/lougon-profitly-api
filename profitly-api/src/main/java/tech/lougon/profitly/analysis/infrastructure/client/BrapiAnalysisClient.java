@@ -431,14 +431,16 @@ public class BrapiAnalysisClient {
 
     /**
      * Fetches financial statements for comma-separated symbols.
-     * endpoint: "balance-sheet" | "income-statement" | "cash-flow" | "value-added".
-     * Rows come back as raw JSON nodes so every field is preserved.
+     * endpoint: "balance-sheet" | "income-statement" | "cash-flow" | "value-added";
+     * period: "annual" | "quarterly" (quarterly rows are per-quarter values).
+     * Rows come back as generic maps so every field is preserved.
      */
-    public List<BrapiStockStatementsResponse.Result> fetchStatements(String endpoint, String symbols) {
+    public List<BrapiStockStatementsResponse.Result> fetchStatements(String endpoint, String symbols, String period) {
         try {
             BrapiStockStatementsResponse response = webClient.get()
                     .uri(u -> u.path("/api/v2/stocks/" + endpoint)
                             .queryParam("symbols", symbols)
+                            .queryParam("period", period)
                             .build())
                     .retrieve()
                     .bodyToMono(BrapiStockStatementsResponse.class)
@@ -448,7 +450,7 @@ public class BrapiAnalysisClient {
                     .filter(r -> r != null && r.symbol() != null && r.data() != null)
                     .toList();
         } catch (Exception e) {
-            log.warn("Failed to fetch {} for [{}]: {}", endpoint, symbols, e.getMessage());
+            log.warn("Failed to fetch {} ({}) for [{}]: {}", endpoint, period, symbols, e.getMessage());
             return List.of();
         }
     }

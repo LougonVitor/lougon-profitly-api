@@ -109,7 +109,8 @@ public class StockAnalysisSyncScheduler {
                 syncIndicators(joined);
                 syncDividends(joined);
                 for (String endpoint : STATEMENT_ENDPOINTS.keySet()) {
-                    syncStatements(endpoint, joined);
+                    syncStatements(endpoint, joined, "annual");
+                    syncStatements(endpoint, joined, "quarterly");
                 }
             } catch (Exception e) {
                 log.warn("Stock analysis batch {}/{} failed: {}", batchIndex, batches.size(), e.getMessage());
@@ -284,13 +285,14 @@ public class StockAnalysisSyncScheduler {
         }
     }
 
-    private void syncStatements(String endpoint, String symbols) {
+    private void syncStatements(String endpoint, String symbols, String period) {
         String statementType = STATEMENT_ENDPOINTS.get(endpoint);
-        for (BrapiStockStatementsResponse.Result r : brapiClient.fetchStatements(endpoint, symbols)) {
+        String defaultPeriodType = "annual".equals(period) ? "yearly" : "quarterly";
+        for (BrapiStockStatementsResponse.Result r : brapiClient.fetchStatements(endpoint, symbols, period)) {
             for (Map<String, Object> row : r.data()) {
                 if (row == null || row.get("endDate") == null) continue;
                 String endDate = String.valueOf(row.get("endDate"));
-                String periodType = row.get("type") != null ? String.valueOf(row.get("type")) : "yearly";
+                String periodType = row.get("type") != null ? String.valueOf(row.get("type")) : defaultPeriodType;
                 try {
                     StockStatementJpaEntity e = statementRepo
                             .findBySymbolAndStatementTypeAndPeriodTypeAndEndDate(r.symbol(), statementType, periodType, endDate)
