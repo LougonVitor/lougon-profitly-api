@@ -19,6 +19,6 @@ public record BrapiCryptoResponse(List<CryptoQuote> coins) {
             Double regularMarketDayLow,
             Double regularMarketVolume,
             Double marketCap,
-            Long regularMarketTime
+            String regularMarketTime
     ) {}
 }

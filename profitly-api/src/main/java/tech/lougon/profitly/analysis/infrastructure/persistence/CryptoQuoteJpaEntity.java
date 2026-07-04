@@ -39,8 +39,10 @@ public class CryptoQuoteJpaEntity {
     @Column(name = "market_cap")
     private Double marketCap;
 
-    @Column(name = "market_time")
-    private Long marketTime;
+    /** Quote timestamp from brapi (ISO string parsed to Instant). New column name because
+     *  the original market_time column was created as bigint and ddl-auto=update can't retype it. */
+    @Column(name = "market_time_at")
+    private Instant marketTime;
 
     @Column(name = "synced_at", nullable = false)
     private Instant syncedAt;
@@ -67,8 +69,8 @@ public class CryptoQuoteJpaEntity {
     public void setVolume(Double v) { this.volume = v; }
     public Double getMarketCap() { return marketCap; }
     public void setMarketCap(Double v) { this.marketCap = v; }
-    public Long getMarketTime() { return marketTime; }
-    public void setMarketTime(Long v) { this.marketTime = v; }
+    public Instant getMarketTime() { return marketTime; }
+    public void setMarketTime(Instant v) { this.marketTime = v; }
     public Instant getSyncedAt() { return syncedAt; }
     public void setSyncedAt(Instant v) { this.syncedAt = v; }
 }

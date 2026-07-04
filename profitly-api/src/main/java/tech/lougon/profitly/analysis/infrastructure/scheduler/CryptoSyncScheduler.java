@@ -100,7 +100,7 @@ public class CryptoSyncScheduler {
         entity.setDayLow(quote.regularMarketDayLow());
         entity.setVolume(quote.regularMarketVolume());
         entity.setMarketCap(quote.marketCap());
-        entity.setMarketTime(quote.regularMarketTime());
+        entity.setMarketTime(parseInstant(quote.regularMarketTime()));
         entity.setSyncedAt(Instant.now());
         quoteRepo.save(entity);
     }
@@ -124,6 +124,15 @@ public class CryptoSyncScheduler {
         }
         ticker.setSyncedAt(Instant.now());
         tickerRepo.save(ticker);
+    }
+
+    private static Instant parseInstant(String iso) {
+        if (iso == null || iso.isBlank()) return null;
+        try {
+            return Instant.parse(iso);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static <T> List<List<T>> partition(List<T> list, int size) {
