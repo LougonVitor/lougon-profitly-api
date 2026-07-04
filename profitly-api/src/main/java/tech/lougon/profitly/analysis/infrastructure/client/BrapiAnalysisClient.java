@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiListResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFinancialDataResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiHistoricalResponse;
@@ -113,6 +114,27 @@ public class BrapiAnalysisClient {
             return data.cashDividends();
         } catch (Exception e) {
             log.warn("Failed to fetch dividends for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Fetches FII list data for up to 20 comma-separated symbols via /api/v2/fii/list. */
+    public List<BrapiFiiListResponse.FiiListItem> fetchFiiList(String symbols) {
+        try {
+            BrapiFiiListResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/fii/list")
+                            .queryParam("symbols", symbols)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFiiListResponse.class)
+                    .block();
+
+            if (response == null || response.fiis() == null) return List.of();
+            return response.fiis().stream()
+                    .filter(f -> f != null && f.symbol() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII list for [{}]: {}", symbols, e.getMessage());
             return List.of();
         }
     }

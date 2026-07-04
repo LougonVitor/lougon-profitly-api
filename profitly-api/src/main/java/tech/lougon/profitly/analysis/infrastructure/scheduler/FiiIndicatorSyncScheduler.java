@@ -9,7 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
-import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiListResponse;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FiiIndicatorHistoryJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FiiIndicatorJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorHistoryRepository;
@@ -20,7 +20,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -82,7 +81,7 @@ public class FiiIndicatorSyncScheduler {
         log.info("FII indicator sync complete: {}/{} tickers had indicator data", synced.size(), fiiSymbols.size());
     }
 
-    /** Fetches current indicators in batches of 20. Returns symbols that had data. */
+    /** Fetches current indicators via /api/v2/fii/list in batches of 20. Returns symbols that had data. */
     private Set<String> syncCurrentBatched(List<String> symbols) {
         Set<String> synced = new java.util.LinkedHashSet<>();
         List<List<String>> batches = partition(symbols, BATCH_SIZE);
@@ -90,16 +89,15 @@ public class FiiIndicatorSyncScheduler {
         for (List<String> batch : batches) {
             try {
                 String joined = String.join(",", batch);
-                List<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> results =
-                        brapiClient.fetchFiiIndicatorsBatch(joined);
+                List<BrapiFiiListResponse.FiiListItem> results = brapiClient.fetchFiiList(joined);
 
-                for (BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo info : results) {
-                    if (info.symbol() == null || info.data() == null) continue;
+                for (BrapiFiiListResponse.FiiListItem item : results) {
+                    if (item.symbol() == null) continue;
                     try {
-                        saveCurrent(info);
-                        synced.add(info.symbol());
+                        saveCurrent(item);
+                        synced.add(item.symbol());
                     } catch (Exception e) {
-                        log.warn("Failed to save FII indicator for {}: {}", info.symbol(), e.getMessage());
+                        log.warn("Failed to save FII indicator for {}: {}", item.symbol(), e.getMessage());
                     }
                 }
             } catch (Exception e) {
@@ -109,28 +107,19 @@ public class FiiIndicatorSyncScheduler {
         return synced;
     }
 
-    private void saveCurrent(BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo info) {
-        String symbol = info.symbol();
-        BrapiFiiIndicatorsResponse.FiiIndicator d = info.data();
+    private void saveCurrent(BrapiFiiListResponse.FiiListItem item) {
+        FiiIndicatorJpaEntity entity = indicatorRepo.findById(item.symbol())
+                .orElseGet(() -> { var e = new FiiIndicatorJpaEntity(); e.setSymbol(item.symbol()); return e; });
 
-        FiiIndicatorJpaEntity entity = indicatorRepo.findById(symbol)
-                .orElseGet(() -> { var e = new FiiIndicatorJpaEntity(); e.setSymbol(symbol); return e; });
-
-        entity.setAsOfDate(d.asOfDate());
-        entity.setPrice(d.price());
-        entity.setNavPerShare(d.navPerShare());
-        entity.setPriceToNav(d.priceToNav());
-        entity.setDividendYield12m(d.dividendYield12m());
-        entity.setDividendYield1m(d.dividendYield1m());
-        entity.setMonthlyReturn(d.monthlyReturn());
-        entity.setTotalInvestors(d.totalInvestors());
-        entity.setSharesOutstanding(d.sharesOutstanding());
-        entity.setEquity(d.equity());
-        entity.setTotalAssets(d.totalAssets());
-        entity.setSegmentType(d.segmentType());
-        if (info.administrator() != null) {
-            entity.setAdminName(info.administrator().name());
-            entity.setAdminCnpj(info.administrator().cnpj());
+        entity.setPrice(item.price());
+        entity.setNavPerShare(item.navPerShare());
+        entity.setPriceToNav(item.priceToNav());
+        entity.setDividendYield12m(item.dividendYield12m());
+        entity.setSegmentType(item.segmentType());
+        entity.setAdminName(item.administratorName());
+        entity.setAdminCnpj(item.administratorCnpj());
+        if (item.totalInvestors() != null) {
+            entity.setTotalInvestors(item.totalInvestors().longValue());
         }
         entity.setSyncedAt(Instant.now());
         indicatorRepo.save(entity);
