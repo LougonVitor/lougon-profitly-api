@@ -54,18 +54,20 @@ public class RankingsService {
     }
 
     private RankingsDTO buildFiiRankings(Map<String, TickerJpaEntity> tickerMap) {
-        // Use fii_indicators for FII-specific data
         Map<String, FiiIndicatorJpaEntity> fiiMap = fiiIndicatorRepo.findAll().stream()
                 .filter(f -> tickerMap.containsKey(f.getSymbol()))
                 .collect(Collectors.toMap(FiiIndicatorJpaEntity::getSymbol, f -> f, (a, b) -> a));
 
-        // Minimum equity (patrimônio) of R$50M for FIIs
+        // If fii_indicators is still empty (sync not yet run), fall back to ticker_analysis
+        if (fiiMap.isEmpty()) {
+            return buildFiiFallbackRankings(tickerMap);
+        }
+
         double minEquity = 50_000_000.0;
 
-        // 1. Dividend Yield 12m — ranked by DY12m
         List<RankingItemDTO> dividendYield = fiiMap.values().stream()
                 .filter(f -> f.getDividendYield12m() != null && f.getDividendYield12m() > 0
-                        && f.getDividendYield12m() < 50     // sanity: < 50% DY
+                        && f.getDividendYield12m() < 50
                         && f.getEquity() != null && f.getEquity() >= minEquity)
                 .sorted(Comparator.comparingDouble(f -> -f.getDividendYield12m()))
                 .limit(5)
@@ -76,7 +78,6 @@ public class RankingsService {
                 })
                 .toList();
 
-        // 2. Maiores patrimônios (equity)
         List<RankingItemDTO> marketCap = fiiMap.values().stream()
                 .filter(f -> f.getEquity() != null && f.getEquity() >= minEquity)
                 .sorted(Comparator.comparingDouble(f -> -f.getEquity()))
@@ -88,7 +89,6 @@ public class RankingsService {
                 })
                 .toList();
 
-        // 3. Mais cotistas (totalInvestors)
         List<RankingItemDTO> revenue = fiiMap.values().stream()
                 .filter(f -> f.getTotalInvestors() != null && f.getTotalInvestors() > 0
                         && f.getEquity() != null && f.getEquity() >= minEquity)
@@ -102,6 +102,41 @@ public class RankingsService {
                 .toList();
 
         return new RankingsDTO(dividendYield, marketCap, revenue);
+    }
+
+    /** Fallback used before the first FII indicator sync completes. Uses ticker_analysis data. */
+    private RankingsDTO buildFiiFallbackRankings(Map<String, TickerJpaEntity> tickerMap) {
+        Map<String, TickerAnalysisJpaEntity> analysisMap = analysisRepo.findBySymbolIn(tickerMap.keySet()).stream()
+                .collect(Collectors.toMap(TickerAnalysisJpaEntity::getSymbol, a -> a, (a, b) -> a));
+
+        List<RankingItemDTO> dividendYield = analysisMap.values().stream()
+                .filter(a -> a.getDividendYield() != null
+                        && a.getDividendYield().doubleValue() > 0
+                        && a.getDividendYield().doubleValue() < 0.50)
+                .sorted(Comparator.comparingDouble(a -> -a.getDividendYield().doubleValue()))
+                .limit(5)
+                .map(a -> {
+                    var t = tickerMap.get(a.getSymbol());
+                    return new RankingItemDTO(t.getSymbol(), t.getName(), t.getLogoUrl(),
+                            a.getDividendYield().doubleValue() * 100); // convert to % for FII display
+                })
+                .toList();
+
+        // Use bookValue × sharesOutstanding as proxy for equity when fii_indicators not yet synced
+        List<RankingItemDTO> marketCap = analysisMap.values().stream()
+                .filter(a -> a.getBookValue() != null && a.getSharesOutstanding() != null)
+                .sorted(Comparator.comparingDouble(a ->
+                        -a.getBookValue().doubleValue() * a.getSharesOutstanding()))
+                .limit(5)
+                .map(a -> {
+                    var t = tickerMap.get(a.getSymbol());
+                    double equity = a.getBookValue().doubleValue() * a.getSharesOutstanding();
+                    return new RankingItemDTO(t.getSymbol(), t.getName(), t.getLogoUrl(), equity);
+                })
+                .toList();
+
+        // No totalInvestors available in ticker_analysis — return empty for now
+        return new RankingsDTO(dividendYield, marketCap, List.of());
     }
 
     private RankingsDTO buildStockRankings(Map<String, TickerJpaEntity> tickerMap) {

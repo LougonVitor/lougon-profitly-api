@@ -1,7 +1,9 @@
 package tech.lougon.profitly.analysis.infrastructure.scheduler;
 
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
@@ -35,6 +37,16 @@ public class FiiIndicatorSyncScheduler {
         this.indicatorRepo = indicatorRepo;
         this.historyRepo = historyRepo;
         this.brapiClient = brapiClient;
+    }
+
+    /** Runs once on startup (async so it doesn't block Spring context init). */
+    @PostConstruct
+    @Async
+    public void syncOnStartup() {
+        if (indicatorRepo.count() == 0) {
+            log.info("fii_indicators table is empty — running initial sync on startup");
+            syncAll();
+        }
     }
 
     /** Nightly sync at 19:30, after the main ticker sync (19:00). */
