@@ -13,6 +13,9 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiDividendsRes
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFinancialDataResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiHistoricalResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStatisticsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryListResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryIndicatorsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryHistoryResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -214,6 +217,60 @@ public class BrapiAnalysisClient {
                     .toList();
         } catch (Exception e) {
             log.warn("Failed to fetch FII indicator history for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<BrapiTreasuryListResponse.TreasuryItem> fetchTreasuryList() {
+        try {
+            BrapiTreasuryListResponse response = webClient.get()
+                    .uri("/api/v2/treasury/list")
+                    .retrieve()
+                    .bodyToMono(BrapiTreasuryListResponse.class)
+                    .block();
+            if (response == null || response.treasuries() == null) return List.of();
+            return response.treasuries().stream().filter(t -> t != null && t.symbol() != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch treasury list: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<BrapiTreasuryIndicatorsResponse.TreasuryIndicator> fetchTreasuryIndicators(String symbols) {
+        try {
+            BrapiTreasuryIndicatorsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/treasury/indicators")
+                            .queryParam("symbols", symbols)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiTreasuryIndicatorsResponse.class)
+                    .block();
+            if (response == null || response.treasuries() == null) return List.of();
+            return response.treasuries().stream().filter(t -> t != null && t.symbol() != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch treasury indicators for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<BrapiTreasuryHistoryResponse.TreasuryHistoryEntry> fetchTreasuryHistory(
+            String symbol, String startDate, String endDate) {
+        try {
+            BrapiTreasuryHistoryResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/treasury/indicators/history")
+                                .queryParam("symbols", symbol);
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        if (endDate != null) b = b.queryParam("endDate", endDate);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiTreasuryHistoryResponse.class)
+                    .block();
+            if (response == null || response.treasuries() == null) return List.of();
+            return response.treasuries().stream().filter(e -> e != null && e.referenceDate() != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch treasury history for {}: {}", symbol, e.getMessage());
             return List.of();
         }
     }
