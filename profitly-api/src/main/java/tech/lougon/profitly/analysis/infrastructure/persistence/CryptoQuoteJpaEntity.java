@@ -24,6 +24,13 @@ public class CryptoQuoteJpaEntity {
     @Column(name = "price")
     private Double price;
 
+    /** BRL per USD rate used by brapi to convert the quote (currencyRateFromUSD). */
+    @Column(name = "usd_to_brl_rate")
+    private Double usdToBrlRate;
+
+    @Column(name = "change_value")
+    private Double changeValue;
+
     @Column(name = "change_percent")
     private Double changePercent;
 
@@ -59,6 +66,10 @@ public class CryptoQuoteJpaEntity {
     public void setImageUrl(String v) { this.imageUrl = v; }
     public Double getPrice() { return price; }
     public void setPrice(Double v) { this.price = v; }
+    public Double getUsdToBrlRate() { return usdToBrlRate; }
+    public void setUsdToBrlRate(Double v) { this.usdToBrlRate = v; }
+    public Double getChangeValue() { return changeValue; }
+    public void setChangeValue(Double v) { this.changeValue = v; }
     public Double getChangePercent() { return changePercent; }
     public void setChangePercent(Double v) { this.changePercent = v; }
     public Double getDayHigh() { return dayHigh; }
