@@ -375,6 +375,184 @@ class BrapiDtoParseTest {
         assertThat(div.relatedTo()).isEqualTo("MAI/2025");
     }
 
+    @Test
+    void fundDividends_parsesV2FundsShape() throws Exception {
+        String json = """
+                {
+                  "dividends": [
+                    {
+                      "symbol": "JURO11",
+                      "cnpj": "42730834000100",
+                      "assetType": "fiinfra",
+                      "declaredDate": "2026-05-29T00:00:00.000Z",
+                      "lastDatePrior": "2026-05-29T00:00:00.000Z",
+                      "paymentDate": "2026-06-13T00:00:00.000Z",
+                      "rate": 0.5,
+                      "label": "RENDIMENTO",
+                      "isinCode": "BRJUROCTF002"
+                    }
+                  ],
+                  "pagination": { "page": 1, "totalItems": 1, "totalPages": 1, "hasNextPage": false }
+                }
+                """;
+
+        BrapiFundDividendsResponse response = mapper.readValue(json, BrapiFundDividendsResponse.class);
+
+        assertThat(response.dividends()).hasSize(1);
+        BrapiFundDividendsResponse.FundDividend div = response.dividends().get(0);
+        assertThat(div.symbol()).isEqualTo("JURO11");
+        assertThat(div.assetType()).isEqualTo("fiinfra");
+        assertThat(div.declaredDate()).isEqualTo("2026-05-29T00:00:00.000Z");
+        assertThat(div.rate()).isEqualTo(0.5);
+        assertThat(div.isinCode()).isEqualTo("BRJUROCTF002");
+        assertThat(response.pagination().hasNextPage()).isFalse();
+    }
+
+    @Test
+    void fundIndicators_parsesMonthlyMetrics() throws Exception {
+        String json = """
+                {
+                  "funds": [
+                    {
+                      "symbol": "XPCA11",
+                      "cnpj": "41269527000101",
+                      "name": "XP CRÉDITO AGRÍCOLA",
+                      "assetType": "fiagro",
+                      "asOfDate": "2026-06-18T00:00:00.000Z",
+                      "price": 8.02,
+                      "navPerShare": 10.71,
+                      "priceToNav": 0.7488328,
+                      "equity": 487325340,
+                      "totalAssets": 492323580,
+                      "totalInvestors": 94254,
+                      "dailyApplications": 0,
+                      "dailyRedemptions": 0,
+                      "sharesOutstanding": 45523076,
+                      "monthlyReturn": 0.11,
+                      "patrimonialMonthlyReturn": -0.92,
+                      "dividendYieldMonthly": 1.03
+                    }
+                  ]
+                }
+                """;
+
+        BrapiFundIndicatorsResponse response = mapper.readValue(json, BrapiFundIndicatorsResponse.class);
+
+        assertThat(response.funds()).hasSize(1);
+        BrapiFundIndicatorsResponse.FundIndicators ind = response.funds().get(0);
+        assertThat(ind.symbol()).isEqualTo("XPCA11");
+        assertThat(ind.assetType()).isEqualTo("fiagro");
+        assertThat(ind.navPerShare()).isEqualTo(10.71);
+        assertThat(ind.monthlyReturn()).isEqualTo(0.11);
+        assertThat(ind.patrimonialMonthlyReturn()).isEqualTo(-0.92);
+        assertThat(ind.dividendYieldMonthly()).isEqualTo(1.03);
+        assertThat(ind.sharesOutstanding()).isEqualTo(45523076.0);
+    }
+
+    @Test
+    void fundNavHistory_parsesFlatEntriesWithPagination() throws Exception {
+        String json = """
+                {
+                  "history": [
+                    {
+                      "symbol": "JURO11",
+                      "cnpj": "42730834000100",
+                      "date": "2026-06-18T00:00:00.000Z",
+                      "classOrSeries": null,
+                      "totalAssets": 2041704100,
+                      "navPerShare": 99.19945,
+                      "equity": 2040699000,
+                      "dailyApplications": 0,
+                      "dailyRedemptions": 0,
+                      "totalInvestors": 92710,
+                      "monthlyReturn": null
+                    },
+                    {
+                      "symbol": "JURO11",
+                      "cnpj": "42730834000100",
+                      "date": "2026-06-17T00:00:00.000Z",
+                      "totalAssets": 2044940400,
+                      "navPerShare": 99.36075,
+                      "equity": 2044017200,
+                      "totalInvestors": 92779
+                    }
+                  ],
+                  "pagination": { "page": 1, "limit": 20, "totalItems": 114, "totalPages": 6, "hasNextPage": true }
+                }
+                """;
+
+        BrapiFundNavHistoryResponse response = mapper.readValue(json, BrapiFundNavHistoryResponse.class);
+
+        assertThat(response.history()).hasSize(2);
+        BrapiFundNavHistoryResponse.NavEntry entry = response.history().get(0);
+        assertThat(entry.symbol()).isEqualTo("JURO11");
+        assertThat(entry.date()).isEqualTo("2026-06-18T00:00:00.000Z");
+        assertThat(entry.navPerShare()).isEqualTo(99.19945);
+        assertThat(entry.totalInvestors().longValue()).isEqualTo(92_710L);
+        assertThat(response.pagination().hasNextPage()).isTrue();
+        assertThat(response.pagination().totalPages()).isEqualTo(6);
+    }
+
+    @Test
+    void fundRawList_parsesProfilesReportsAndFundsRoots() throws Exception {
+        String profileJson = """
+                {
+                  "profiles": [
+                    {
+                      "symbol": "JURO11",
+                      "cnpj": "42730834000100",
+                      "referenceDate": "2026-05-31T00:00:00.000Z",
+                      "investorBreakdown": { "fundsOrClubs": 1, "fundsOrClubsPercent": 100 },
+                      "risk": { "riskModel": "Modelos Não-Paramétricos", "portfolioVar": 0 }
+                    }
+                  ]
+                }
+                """;
+        String reportJson = """
+                {
+                  "reports": [
+                    {
+                      "symbol": "XPCA11",
+                      "cnpj": "41269527000101",
+                      "referenceDate": "2026-05-01T00:00:00.000Z",
+                      "dividendYieldMonthly": 1.03,
+                      "incomeToDistribute": 4567754.5
+                    }
+                  ],
+                  "pagination": { "page": 1, "totalItems": 5, "totalPages": 1, "hasNextPage": false }
+                }
+                """;
+        String portfolioJson = """
+                {
+                  "funds": [
+                    {
+                      "symbol": "XPCA11",
+                      "referenceDate": "2026-05-01T00:00:00.000Z",
+                      "allocations": { "cra": 299574550.49, "fidc": 99610927.4, "fiagro": 42988149.25 }
+                    }
+                  ]
+                }
+                """;
+
+        BrapiFundRawListResponse profile = mapper.readValue(profileJson, BrapiFundRawListResponse.class);
+        BrapiFundRawListResponse report = mapper.readValue(reportJson, BrapiFundRawListResponse.class);
+        BrapiFundRawListResponse portfolio = mapper.readValue(portfolioJson, BrapiFundRawListResponse.class);
+
+        assertThat(profile.items()).hasSize(1);
+        assertThat(profile.items().get(0).get("symbol")).isEqualTo("JURO11");
+        assertThat(profile.items().get(0).get("investorBreakdown")).isInstanceOf(java.util.Map.class);
+
+        assertThat(report.items()).hasSize(1);
+        assertThat(report.items().get(0).get("dividendYieldMonthly")).isEqualTo(1.03);
+        assertThat(report.pagination().totalItems()).isEqualTo(5);
+
+        assertThat(portfolio.items()).hasSize(1);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> allocations =
+                (java.util.Map<String, Object>) portfolio.items().get(0).get("allocations");
+        assertThat(allocations.get("cra")).isEqualTo(299574550.49);
+    }
+
     // ── Multi-item batch parsing ───────────────────────────────────────────────
 
     @Test
