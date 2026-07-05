@@ -17,6 +17,10 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryList
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundListResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundIndicatorsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundNavHistoryResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundRawListResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoAvailableResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockQuoteResponse;
@@ -311,6 +315,113 @@ public class BrapiAnalysisClient {
             return response.funds().stream().filter(f -> f != null && f.symbol() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch fund list for assetType={}: {}", assetType, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Monthly indicators for up to 20 comma-separated fund symbols via /funds/indicators. */
+    public List<BrapiFundIndicatorsResponse.FundIndicators> fetchFundIndicators(String symbols) {
+        try {
+            BrapiFundIndicatorsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/funds/indicators")
+                            .queryParam("symbols", symbols)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFundIndicatorsResponse.class)
+                    .block();
+            if (response == null || response.funds() == null) return List.of();
+            return response.funds().stream().filter(f -> f != null && f.symbol() != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch fund indicators for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Daily NAV series for up to 20 comma-separated fund symbols via /funds/nav/history.
+     * The response is a FLAT list (one entry per symbol+date); pages are followed until
+     * exhausted so callers always get the complete window.
+     */
+    public List<BrapiFundNavHistoryResponse.NavEntry> fetchFundNavHistory(
+            String symbols, String startDate, String endDate) {
+        List<BrapiFundNavHistoryResponse.NavEntry> all = new java.util.ArrayList<>();
+        int page = 1;
+        while (true) {
+            final int currentPage = page;
+            try {
+                BrapiFundNavHistoryResponse response = webClient.get()
+                        .uri(u -> {
+                            var b = u.path("/api/v2/funds/nav/history")
+                                    .queryParam("symbols", symbols)
+                                    .queryParam("limit", 10000)
+                                    .queryParam("sortOrder", "asc")
+                                    .queryParam("page", currentPage);
+                            if (startDate != null) b = b.queryParam("startDate", startDate);
+                            if (endDate != null) b = b.queryParam("endDate", endDate);
+                            return b.build();
+                        })
+                        .retrieve()
+                        .bodyToMono(BrapiFundNavHistoryResponse.class)
+                        .block();
+                if (response == null || response.history() == null || response.history().isEmpty()) break;
+                response.history().stream()
+                        .filter(h -> h != null && h.symbol() != null && h.date() != null)
+                        .forEach(all::add);
+                if (response.pagination() == null || !Boolean.TRUE.equals(response.pagination().hasNextPage())) break;
+                page++;
+            } catch (Exception e) {
+                log.warn("Failed to fetch fund NAV history for [{}] page {}: {}", symbols, currentPage, e.getMessage());
+                break;
+            }
+        }
+        return all;
+    }
+
+    /** Dividend events for up to 20 comma-separated fund symbols via /funds/dividends. */
+    public List<BrapiFundDividendsResponse.FundDividend> fetchFundDividends(String symbols, String startDate) {
+        try {
+            BrapiFundDividendsResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/funds/dividends")
+                                .queryParam("symbols", symbols)
+                                .queryParam("limit", 10000)
+                                .queryParam("sortOrder", "desc");
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiFundDividendsResponse.class)
+                    .block();
+            if (response == null || response.dividends() == null) return List.of();
+            return response.dividends().stream()
+                    .filter(d -> d != null && d.symbol() != null && d.rate() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch fund dividends for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Generic fetch for the fund document endpoints (profile, portfolio and the
+     * fiagro/fidc/fip reports and portfolios). Rows come back as raw maps — callers
+     * store them whole under the raw JSON pattern. {@code path} examples:
+     * "/api/v2/funds/profile", "/api/v2/funds/fiagro/reports".
+     */
+    public List<java.util.Map<String, Object>> fetchFundDocuments(String path, String symbols) {
+        try {
+            BrapiFundRawListResponse response = webClient.get()
+                    .uri(u -> u.path(path)
+                            .queryParam("symbols", symbols)
+                            .queryParam("limit", 10000)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFundRawListResponse.class)
+                    .block();
+            if (response == null || response.items() == null) return List.of();
+            return response.items().stream().filter(i -> i != null && i.get("symbol") != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch fund documents {} for [{}]: {}", path, symbols, e.getMessage());
             return List.of();
         }
     }
