@@ -45,7 +45,18 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - Gráfico de cripto NÃO tem "vs IBOV" (prop `showBenchmark={false}` no `PriceChartSection`)
 - `profitly.sync.crypto-on-startup=false` — ligar só durante dev ativo da tela de cripto (cron das 19h50 mantém os dados)
 
+## Tesouro Direto
+
+- Símbolos são minúsculos (`tesouro-prefixado-01012029`) — o `/api/analysis/{symbol}` genérico tenta o símbolo como veio e só depois uppercase (não voltar a fazer uppercase incondicional)
+- `TreasurySyncScheduler` (19h45 BRT): `/api/v2/treasury/list` (1 chamada traz os ~60 títulos) → salva `treasury_bonds` + upsert em `tickers` → histórico em `treasury_bond_history` via `/treasury/indicators/history` em lotes de 20 símbolos (backfill desde 2020 quando o título não tem linhas — brapi só tem dados desde ~2022-02; incremental 3 meses nos demais)
+- Resposta do history é ANINHADA: `results[].history[]` com `baseDate` (não é lista plana); `/treasury/indicators` usa root `results` (não `treasuries`), mesmo shape do list
+- **rateInfo importa**: para Tesouro Selic `buyRate`/`sellRate` são SPREAD sobre a Selic (ex.: 0,08), não a rentabilidade total — exibir "SELIC + x%"; prefixado é taxa nominal, IPCA+ é taxa real. `rate_type`/`rate_unit`/`rate_description` ficam em `treasury_bonds`
+- `/api/treasury/analysis/{symbol}` (`TreasuryAnalysisService`): variação da taxa por período (p.p.), faixa 52s da taxa, extremos históricos, retornos de marcação a mercado (sellPrice), volatilidade anualizada √252 (pregões), drawdown 1a, ranking por taxa dentro do indexador, títulos irmãos — tudo do banco
+- Tela segue o layout da de cripto: barra de 5 métricas, gráfico com toggle de métrica + ranges 3M–Máx, grids de variação/retornos, cards de risco/extremos, tabela clicável de títulos do mesmo indexador
+- **`profitly.sync.treasury-on-startup=true` é TEMPORÁRIO** (dev da tela de tesouro) — voltar para false ao concluir
+
 ## Estado (2026-07-05)
 
-- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC)
-- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile
+- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC), tela de Tesouro Direto (histórico de taxas, faixa 52s, marcação a mercado, comparação por indexador)
+- **Frente atual:** refinamento da tela de Tesouro Direto
+- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile; desativar `profitly.sync.treasury-on-startup` ao fim do dev de tesouro
