@@ -216,6 +216,12 @@ public class StockAnalysisService {
         if (ebit != null && revenueYearly != null && revenueYearly != 0) margemEbit = ebit / revenueYearly;
         else if (f != null) margemEbit = f.getOperatingMargins();
         ind.put("margemEbit", margemEbit);
+        ind.put("margemEbitda", f != null ? f.getEbitdaMargins() : null);
+        ind.put("margemOperacional", f != null ? f.getOperatingMargins() : null);
+        ind.put("crescReceita", f != null
+                ? (f.getRevenueGrowthAnnual() != null ? f.getRevenueGrowthAnnual() : f.getRevenueGrowth()) : null);
+        ind.put("crescLucro", f != null
+                ? (f.getEarningsGrowthAnnual() != null ? f.getEarningsGrowthAnnual() : f.getEarningsGrowth()) : null);
         ind.put("evEbit", ratio(enterpriseValue, ebit));
         ind.put("pEbit", ratio(marketCap, ebit));
         ind.put("pAtivo", ratio(marketCap, totalAssets));
