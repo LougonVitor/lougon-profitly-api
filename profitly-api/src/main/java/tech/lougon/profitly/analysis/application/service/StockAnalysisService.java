@@ -225,6 +225,8 @@ public class StockAnalysisService {
                 ? ratio(marketCap, curAssets - totalLiab) : null);
         ind.put("vpa", a != null ? toDouble(a.bookValue()) : null);
         ind.put("lpa", eps);
+        ind.put("beta", a != null ? toDouble(a.beta()) : null);
+        ind.put("pegRatio", a != null ? toDouble(a.pegRatio()) : null);
         ind.put("giroAtivos", ratio(totalRevenueTtm != null ? totalRevenueTtm : revenueYearly, totalAssets));
         ind.put("roe", f != null ? f.getReturnOnEquity() : null);
         ind.put("roic", computeRoic(nopat, ebit, equity, f));
