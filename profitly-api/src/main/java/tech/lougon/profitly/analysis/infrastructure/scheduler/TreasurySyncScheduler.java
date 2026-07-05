@@ -88,10 +88,32 @@ public class TreasurySyncScheduler {
         }
         log.info("Treasury sync complete: {}/{}", synced, list.size());
 
-        syncAllHistories(list.stream()
+        List<String> symbols = list.stream()
                 .map(BrapiTreasuryListResponse.TreasuryItem::symbol)
                 .filter(s -> s != null)
-                .toList());
+                .toList();
+        syncAllHistories(symbols);
+        updateTickerDailyChanges(symbols);
+    }
+
+    /**
+     * Treasury quotes carry no daily change, so the hero variation is derived from the
+     * last two buyPrice history entries and stored on the ticker like other assets.
+     */
+    private void updateTickerDailyChanges(List<String> symbols) {
+        for (String symbol : symbols) {
+            List<TreasuryBondHistoryJpaEntity> last2 =
+                    historyRepo.findTop2BySymbolOrderByReferenceDateDesc(symbol);
+            if (last2.size() < 2) continue;
+            Double current = last2.get(0).getBuyPrice();
+            Double previous = last2.get(1).getBuyPrice();
+            if (current == null || previous == null || previous <= 0) continue;
+
+            tickerRepo.findBySymbol(symbol).ifPresent(ticker -> {
+                ticker.setChangePercent(BigDecimal.valueOf((current - previous) / previous * 100.0));
+                tickerRepo.save(ticker);
+            });
+        }
     }
 
     private void saveCurrent(BrapiTreasuryListResponse.TreasuryItem item) {

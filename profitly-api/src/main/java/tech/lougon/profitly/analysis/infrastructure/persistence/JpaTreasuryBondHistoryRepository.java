@@ -9,6 +9,7 @@ import java.util.Optional;
 public interface JpaTreasuryBondHistoryRepository extends JpaRepository<TreasuryBondHistoryJpaEntity, Long> {
     List<TreasuryBondHistoryJpaEntity> findBySymbolOrderByReferenceDateAsc(String symbol);
     Optional<TreasuryBondHistoryJpaEntity> findTopBySymbolOrderByReferenceDateDesc(String symbol);
+    List<TreasuryBondHistoryJpaEntity> findTop2BySymbolOrderByReferenceDateDesc(String symbol);
 
     @Query("SELECT COUNT(h) FROM TreasuryBondHistoryJpaEntity h WHERE h.symbol = :symbol")
     long countBySymbol(@Param("symbol") String symbol);
