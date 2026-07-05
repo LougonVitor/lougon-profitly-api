@@ -18,6 +18,7 @@ public record BrapiFundListResponse(
             String legalName,
             String assetType,
             String b3Classification,
+            String isin,
             String administratorName,
             String administratorCnpj,
             String managerName,
