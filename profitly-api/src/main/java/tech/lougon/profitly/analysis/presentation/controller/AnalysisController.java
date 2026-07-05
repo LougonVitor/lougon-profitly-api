@@ -16,13 +16,18 @@ public class AnalysisController {
         this.analysisService = analysisService;
     }
 
+    // Stock/crypto symbols are stored uppercase, but treasury symbols are lowercase
+    // (e.g. "tesouro-prefixado-01012029") — try the symbol as sent, then uppercased.
     @GetMapping("/{symbol}")
     public ResponseEntity<TickerAnalysisResponse> getAnalysis(@PathVariable String symbol) {
         try {
-            var dto = analysisService.getAnalysis(symbol.toUpperCase());
-            return ResponseEntity.ok(TickerAnalysisResponse.from(dto));
+            return ResponseEntity.ok(TickerAnalysisResponse.from(analysisService.getAnalysis(symbol)));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.notFound().build();
+            try {
+                return ResponseEntity.ok(TickerAnalysisResponse.from(analysisService.getAnalysis(symbol.toUpperCase())));
+            } catch (IllegalArgumentException e2) {
+                return ResponseEntity.notFound().build();
+            }
         }
     }
 
@@ -30,7 +35,11 @@ public class AnalysisController {
     public ResponseEntity<PriceHistoryResponse> getHistory(
             @PathVariable String symbol,
             @RequestParam(defaultValue = "5y") String range) {
-        var points = analysisService.getPriceHistory(symbol.toUpperCase(), range);
-        return ResponseEntity.ok(PriceHistoryResponse.from(symbol.toUpperCase(), range, points));
+        var points = analysisService.getPriceHistory(symbol, range);
+        if (points.isEmpty() && !symbol.equals(symbol.toUpperCase())) {
+            symbol = symbol.toUpperCase();
+            points = analysisService.getPriceHistory(symbol, range);
+        }
+        return ResponseEntity.ok(PriceHistoryResponse.from(symbol, range, points));
     }
 }
