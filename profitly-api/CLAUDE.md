@@ -38,9 +38,11 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 
 ## Cripto
 
-- Histórico diário das moedas vai para `price_points` (mesma tabela das ações, chaveado pelo símbolo da moeda) — o gráfico genérico `/api/analysis/{symbol}/history` funciona sem código novo
-- `CryptoSyncScheduler` (19h50 BRT): catálogo → cotações (lotes de 20) → histórico (backfill `range=max` em lotes de 5 para moedas sem histórico; incremental `3mo` em lotes de 20 para o resto, inserindo só barras novas)
+- Histórico diário das moedas vai para `price_points` (mesma tabela das ações): BRL sob o símbolo da moeda, USD sob `{coin}:USD` — o gráfico genérico `/api/analysis/{symbol}/history` serve ambos sem código novo (toggle BRL/USD no frontend). A série BRL do brapi é sintética (USD × câmbio único do momento da chamada); a USD é a autêntica
+- `CryptoSyncScheduler` (19h50 BRT): catálogo → cotações (lotes de 20) → histórico BRL e USD (backfill `range=max` em lotes de 5 para moedas sem histórico; incremental `3mo` em lotes de 20, inserindo só barras novas) → Fear & Greed
 - `/api/crypto/analysis/{coin}` (`CryptoAnalysisService`): retornos por período, volatilidade anualizada (√365, cripto negocia todo dia), max drawdown 1a, ATH, faixa 52s, SMA50/200, ranking por volume — tudo calculado do banco
+- **Fear & Greed** (`crypto_fear_greed`, exibido só na página do BTC): api.alternative.me/fng, sem chave, backfill `limit=0` (histórico completo, >256KB — client precisa de buffer maior), incremental `limit=30`; valores numéricos chegam como string
+- Gráfico de cripto NÃO tem "vs IBOV" (prop `showBenchmark={false}` no `PriceChartSection`)
 - **`profitly.sync.crypto-on-startup=true` é TEMPORÁRIO** (dev da tela de cripto) — voltar para false ao concluir
 
 ## Estado (2026-07-05)
