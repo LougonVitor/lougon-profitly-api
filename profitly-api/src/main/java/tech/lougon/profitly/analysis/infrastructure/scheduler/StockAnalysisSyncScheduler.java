@@ -19,6 +19,7 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockProfile
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockQuoteResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockStatementsResponse;
 import tech.lougon.profitly.analysis.infrastructure.persistence.*;
+import tech.lougon.profitly.analysis.infrastructure.startup.PriceHistorySyncScheduler;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
 
 import java.time.Instant;
@@ -55,6 +56,7 @@ public class StockAnalysisSyncScheduler {
     private final DividendRepository dividendRepository;
     private final BrapiAnalysisClient brapiClient;
     private final AnalysisService analysisService;
+    private final PriceHistorySyncScheduler priceHistoryScheduler;
 
     public StockAnalysisSyncScheduler(JpaTickerRepository tickerRepo,
                                       JpaStockQuoteRepository quoteRepo,
@@ -64,7 +66,8 @@ public class StockAnalysisSyncScheduler {
                                       JpaStockSplitEventRepository splitRepo,
                                       DividendRepository dividendRepository,
                                       BrapiAnalysisClient brapiClient,
-                                      AnalysisService analysisService) {
+                                      AnalysisService analysisService,
+                                      PriceHistorySyncScheduler priceHistoryScheduler) {
         this.tickerRepo = tickerRepo;
         this.quoteRepo = quoteRepo;
         this.profileRepo = profileRepo;
@@ -74,6 +77,7 @@ public class StockAnalysisSyncScheduler {
         this.dividendRepository = dividendRepository;
         this.brapiClient = brapiClient;
         this.analysisService = analysisService;
+        this.priceHistoryScheduler = priceHistoryScheduler;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -128,6 +132,10 @@ public class StockAnalysisSyncScheduler {
         }
 
         repairUnitDividends(unitSymbols);
+
+        // Backfill price history for symbols whose dividends just arrived — without prices
+        // the annual DY% chart on the analysis page stays empty (async, runs in parallel)
+        priceHistoryScheduler.syncDividendTickersAsync();
 
         log.info("Stock analysis sync complete: {} tickers", symbols.size());
     }
