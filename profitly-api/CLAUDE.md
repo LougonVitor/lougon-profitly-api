@@ -43,10 +43,9 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - `/api/crypto/analysis/{coin}` (`CryptoAnalysisService`): retornos por período, volatilidade anualizada (√365, cripto negocia todo dia), max drawdown 1a, ATH, faixa 52s, SMA50/200, ranking por volume — tudo calculado do banco
 - **Fear & Greed** (`crypto_fear_greed`, exibido só na página do BTC): api.alternative.me/fng, sem chave, backfill `limit=0` (histórico completo, >256KB — client precisa de buffer maior), incremental `limit=30`; valores numéricos chegam como string
 - Gráfico de cripto NÃO tem "vs IBOV" (prop `showBenchmark={false}` no `PriceChartSection`)
-- **`profitly.sync.crypto-on-startup=true` é TEMPORÁRIO** (dev da tela de cripto) — voltar para false ao concluir
+- `profitly.sync.crypto-on-startup=false` — ligar só durante dev ativo da tela de cripto (cron das 19h50 mantém os dados)
 
 ## Estado (2026-07-05)
 
-- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (análise avançada com retornos, risco, ATH, médias móveis, preço USD)
-- **Frente atual:** refinamento da tela de criptoativos
-- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile; desativar `profitly.sync.crypto-on-startup` ao fim do dev de cripto
+- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC)
+- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile
