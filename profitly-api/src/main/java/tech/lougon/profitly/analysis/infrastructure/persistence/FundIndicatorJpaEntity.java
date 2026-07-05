@@ -59,6 +59,40 @@ public class FundIndicatorJpaEntity {
     @Column(name = "segment_type", length = 30)
     private String segmentType;
 
+    @Column(name = "manager_name")
+    private String managerName;
+
+    @Column(name = "manager_cnpj", length = 20)
+    private String managerCnpj;
+
+    @Column(name = "isin", length = 20)
+    private String isin;
+
+    @Column(name = "status", length = 30)
+    private String status;
+
+    /** Reference date of the monthly indicators reported by /funds/indicators. */
+    @Column(name = "as_of_date", length = 30)
+    private String asOfDate;
+
+    @Column(name = "monthly_return")
+    private Double monthlyReturn;
+
+    @Column(name = "patrimonial_monthly_return")
+    private Double patrimonialMonthlyReturn;
+
+    @Column(name = "dividend_yield_monthly")
+    private Double dividendYieldMonthly;
+
+    @Column(name = "daily_applications")
+    private Double dailyApplications;
+
+    @Column(name = "daily_redemptions")
+    private Double dailyRedemptions;
+
+    @Column(name = "shares_outstanding")
+    private Double sharesOutstanding;
+
     @Column(name = "synced_at", nullable = false)
     private Instant syncedAt;
 
@@ -98,6 +132,28 @@ public class FundIndicatorJpaEntity {
     public void setAdminCnpj(String v) { this.adminCnpj = v; }
     public String getSegmentType() { return segmentType; }
     public void setSegmentType(String v) { this.segmentType = v; }
+    public String getManagerName() { return managerName; }
+    public void setManagerName(String v) { this.managerName = v; }
+    public String getManagerCnpj() { return managerCnpj; }
+    public void setManagerCnpj(String v) { this.managerCnpj = v; }
+    public String getIsin() { return isin; }
+    public void setIsin(String v) { this.isin = v; }
+    public String getStatus() { return status; }
+    public void setStatus(String v) { this.status = v; }
+    public String getAsOfDate() { return asOfDate; }
+    public void setAsOfDate(String v) { this.asOfDate = v; }
+    public Double getMonthlyReturn() { return monthlyReturn; }
+    public void setMonthlyReturn(Double v) { this.monthlyReturn = v; }
+    public Double getPatrimonialMonthlyReturn() { return patrimonialMonthlyReturn; }
+    public void setPatrimonialMonthlyReturn(Double v) { this.patrimonialMonthlyReturn = v; }
+    public Double getDividendYieldMonthly() { return dividendYieldMonthly; }
+    public void setDividendYieldMonthly(Double v) { this.dividendYieldMonthly = v; }
+    public Double getDailyApplications() { return dailyApplications; }
+    public void setDailyApplications(Double v) { this.dailyApplications = v; }
+    public Double getDailyRedemptions() { return dailyRedemptions; }
+    public void setDailyRedemptions(Double v) { this.dailyRedemptions = v; }
+    public Double getSharesOutstanding() { return sharesOutstanding; }
+    public void setSharesOutstanding(Double v) { this.sharesOutstanding = v; }
     public Instant getSyncedAt() { return syncedAt; }
     public void setSyncedAt(Instant v) { this.syncedAt = v; }
 }
