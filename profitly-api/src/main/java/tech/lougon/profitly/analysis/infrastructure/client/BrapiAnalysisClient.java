@@ -528,12 +528,21 @@ public class BrapiAnalysisClient {
 
     /** Fetches BRL quotes for comma-separated coin symbols via /api/v2/crypto. */
     public List<BrapiCryptoResponse.CryptoQuote> fetchCryptoQuotes(String coins) {
+        return fetchCryptoQuotes(coins, null, null);
+    }
+
+    /** Fetches BRL quotes with optional daily price history (range=max|1mo|..., interval=1d). */
+    public List<BrapiCryptoResponse.CryptoQuote> fetchCryptoQuotes(String coins, String range, String interval) {
         try {
             BrapiCryptoResponse response = webClient.get()
-                    .uri(u -> u.path("/api/v2/crypto")
-                            .queryParam("coin", coins)
-                            .queryParam("currency", "BRL")
-                            .build())
+                    .uri(u -> {
+                        u.path("/api/v2/crypto")
+                                .queryParam("coin", coins)
+                                .queryParam("currency", "BRL");
+                        if (range != null) u.queryParam("range", range);
+                        if (interval != null) u.queryParam("interval", interval);
+                        return u.build();
+                    })
                     .retrieve()
                     .bodyToMono(BrapiCryptoResponse.class)
                     .block();

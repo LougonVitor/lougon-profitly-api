@@ -463,6 +463,91 @@ class BrapiDtoParseTest {
         assertThat(div.lastDatePrior()).isEqualTo("2026-04-20T03:00:00.000Z");
     }
 
+    // ── Crypto ────────────────────────────────────────────────────────────────
+
+    @Test
+    void cryptoQuote_parsesQuoteWithHistoricalData() throws Exception {
+        // /api/v2/crypto?coin=BTC&currency=BRL&range=1mo&interval=1d
+        String json = """
+                {
+                  "coins": [
+                    {
+                      "currency": "BRL",
+                      "currencyRateFromUSD": 5.1711,
+                      "coinName": "Bitcoin",
+                      "coinImageUrl": "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/btc.svg",
+                      "coin": "BTC",
+                      "regularMarketChange": -980.461776,
+                      "regularMarketPrice": 330383.31586399995,
+                      "regularMarketChangePercent": -0.296,
+                      "regularMarketDayLow": 329015.854664,
+                      "regularMarketDayHigh": 334419.30250399996,
+                      "regularMarketDayRange": "329015.854664 - 334419.30250399996",
+                      "regularMarketVolume": 2769297307.1977596,
+                      "marketCap": 0,
+                      "regularMarketTime": "2026-07-05T17:04:17.001Z",
+                      "usedInterval": "1d",
+                      "usedRange": "1mo",
+                      "historicalDataPrice": [
+                        {
+                          "date": 1780617600,
+                          "open": 336653.612904,
+                          "high": 337138.4688,
+                          "low": 311596.243336,
+                          "close": 321743.174312,
+                          "volume": 55027.28807,
+                          "adjustedClose": 321743.174312
+                        }
+                      ],
+                      "validRanges": ["1d", "1mo", "max"],
+                      "validIntervals": ["1m", "1d"]
+                    }
+                  ],
+                  "requestedAt": "2026-07-05T17:04:45.176Z",
+                  "took": 605
+                }
+                """;
+
+        BrapiCryptoResponse response = mapper.readValue(json, BrapiCryptoResponse.class);
+
+        assertThat(response.coins()).hasSize(1);
+        var quote = response.coins().get(0);
+        assertThat(quote.coin()).isEqualTo("BTC");
+        assertThat(quote.currencyRateFromUSD()).isEqualTo(5.1711);
+        assertThat(quote.regularMarketChange()).isEqualTo(-980.461776);
+        assertThat(quote.regularMarketPrice()).isEqualTo(330383.31586399995);
+        assertThat(quote.historicalDataPrice()).hasSize(1);
+        var bar = quote.historicalDataPrice().get(0);
+        assertThat(bar.date()).isEqualTo(1780617600L);
+        assertThat(bar.close()).isEqualTo(321743.174312);
+        // crypto history volume is fractional (coin units), must parse as Double
+        assertThat(bar.volume()).isEqualTo(55027.28807);
+    }
+
+    @Test
+    void cryptoQuote_parsesQuoteWithoutHistory() throws Exception {
+        String json = """
+                {
+                  "coins": [
+                    {
+                      "currency": "BRL",
+                      "coinName": "Ethereum",
+                      "coin": "ETH",
+                      "regularMarketPrice": 9291.67,
+                      "marketCap": 0
+                    }
+                  ]
+                }
+                """;
+
+        BrapiCryptoResponse response = mapper.readValue(json, BrapiCryptoResponse.class);
+
+        var quote = response.coins().get(0);
+        assertThat(quote.coin()).isEqualTo("ETH");
+        assertThat(quote.historicalDataPrice()).isNull();
+        assertThat(quote.currencyRateFromUSD()).isNull();
+    }
+
     @Test
     void stockStatements_preservesAllFieldsAsRawJson() throws Exception {
         String json = """
