@@ -35,6 +35,7 @@ public class StockAnalysisService {
     private final JpaStockStatementRepository statementRepo;
     private final TickerAnalysisRepository analysisRepository;
     private final DividendRepository dividendRepository;
+    private final JpaStockSplitEventRepository splitRepo;
     private final AnalysisService analysisService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -44,6 +45,7 @@ public class StockAnalysisService {
                                 JpaStockStatementRepository statementRepo,
                                 TickerAnalysisRepository analysisRepository,
                                 DividendRepository dividendRepository,
+                                JpaStockSplitEventRepository splitRepo,
                                 AnalysisService analysisService) {
         this.quoteRepo = quoteRepo;
         this.profileRepo = profileRepo;
@@ -51,6 +53,7 @@ public class StockAnalysisService {
         this.statementRepo = statementRepo;
         this.analysisRepository = analysisRepository;
         this.dividendRepository = dividendRepository;
+        this.splitRepo = splitRepo;
         this.analysisService = analysisService;
     }
 
@@ -242,7 +245,64 @@ public class StockAnalysisService {
         ind.put("liquidezCorrente", f != null ? f.getCurrentRatio() : null);
         ind.put("cagrReceitas5a", cagr5y(symbol, "totalRevenue"));
         ind.put("cagrLucros5a", cagr5y(symbol, "netIncome", "netIncomeFromContinuingOps", "netIncomeApplicableToCommonShares"));
+
+        // ── fair price models (dividend-based) ──────────────────────────────
+        Map<Integer, Double> divByYear = adjustedDividendsByYear(symbol);
+        int prevYear = LocalDate.now().getYear() - 1;
+
+        // Bazin ceiling price: average annual dividends of the last 3 full years ÷ 6%
+        double sum3 = 0;
+        int n3 = 0;
+        for (int y = prevYear; y > prevYear - 3; y--) {
+            Double v = divByYear.get(y);
+            if (v != null && v > 0) { sum3 += v; n3++; }
+        }
+        ind.put("precoTetoBazin", n3 > 0 ? (sum3 / n3) / 0.06 : null);
+
+        // Gordon (DDM): D1 / (k − g), k = 12% a.a., g = dividend CAGR (4y) capped at 0..5%
+        Double gordon = null;
+        if (div12m > 0) {
+            double g = 0.0;
+            Double vOld = divByYear.get(prevYear - 4);
+            Double vNew = divByYear.get(prevYear);
+            if (vOld != null && vOld > 0 && vNew != null && vNew > 0) {
+                g = Math.pow(vNew / vOld, 1.0 / 4) - 1.0;
+            }
+            g = Math.max(0.0, Math.min(g, 0.05));
+            double k = 0.12;
+            gordon = div12m * (1 + g) / (k - g);
+        }
+        ind.put("precoJustoGordon", gordon);
+
         return ind;
+    }
+
+    /** Split-adjusted dividend sums per calendar year (by ex-date), same basis as prices. */
+    private Map<Integer, Double> adjustedDividendsByYear(String symbol) {
+        var splits = splitRepo.findBySymbol(symbol).stream()
+                .filter(s -> s.getFactor() != null && s.getFactor() > 0
+                        && s.getLastDatePrior() != null && s.getLastDatePrior().length() >= 10)
+                .toList();
+
+        Map<Integer, Double> sumByYear = new LinkedHashMap<>();
+        for (DividendEvent d : dividendRepository.findBySymbol(symbol)) {
+            if (d.rate() == null || d.rate() <= 0
+                    || d.lastDatePrior() == null || d.lastDatePrior().length() < 10) continue;
+            String exDate = d.lastDatePrior().substring(0, 10);
+            int year;
+            try {
+                year = Integer.parseInt(exDate.substring(0, 4));
+            } catch (NumberFormatException e) { continue; }
+
+            double cumFactor = 1.0;
+            for (var s : splits) {
+                if (s.getLastDatePrior().substring(0, 10).compareTo(exDate) > 0) {
+                    cumFactor *= s.getFactor();
+                }
+            }
+            sumByYear.merge(year, d.rate() / cumFactor, Double::sum);
+        }
+        return sumByYear;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
