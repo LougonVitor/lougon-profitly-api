@@ -91,6 +91,11 @@ public class StockAnalysisSyncScheduler {
                 .map(t -> t.getSymbol())
                 .toList();
 
+        List<String> unitSymbols = tickerRepo.findAll().stream()
+                .filter(t -> "unit".equalsIgnoreCase(t.getSubType()))
+                .map(t -> t.getSymbol())
+                .toList();
+
         if (symbols.isEmpty()) {
             log.warn("No stock/unit tickers found — skipping stock analysis sync");
             return;
@@ -122,7 +127,34 @@ public class StockAnalysisSyncScheduler {
             }
         }
 
+        repairUnitDividends(unitSymbols);
+
         log.info("Stock analysis sync complete: {} tickers", symbols.size());
+    }
+
+    /**
+     * Units (SANB11, KLBN11, TAEE11...) depend on a 3-level fallback chain that can fail
+     * transiently under sync load (brapi rate limits). Retry individually — with a small
+     * pause between calls — any unit that ended the sync with no dividend history at all.
+     */
+    private void repairUnitDividends(List<String> unitSymbols) {
+        List<String> missing = unitSymbols.stream()
+                .filter(s -> dividendRepository.findBySymbol(s).isEmpty())
+                .toList();
+        if (missing.isEmpty()) return;
+
+        log.info("Dividend repair pass for {} units without history: {}", missing.size(), missing);
+        for (String symbol : missing) {
+            try {
+                Thread.sleep(1500); // breathe between calls to dodge rate limits
+                syncDividends(symbol);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (Exception e) {
+                log.warn("Dividend repair failed for {}: {}", symbol, e.getMessage());
+            }
+        }
     }
 
     private void syncQuotes(String symbols) {
