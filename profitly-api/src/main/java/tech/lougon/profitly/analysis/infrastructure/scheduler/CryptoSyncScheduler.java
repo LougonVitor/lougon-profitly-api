@@ -11,10 +11,13 @@ import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.domain.model.PricePoint;
 import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
+import tech.lougon.profitly.analysis.infrastructure.client.FearGreedClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoResponse;
 import tech.lougon.profitly.analysis.infrastructure.persistence.CryptoCoinJpaEntity;
+import tech.lougon.profitly.analysis.infrastructure.persistence.CryptoFearGreedJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.CryptoQuoteJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaCryptoCoinRepository;
+import tech.lougon.profitly.analysis.infrastructure.persistence.JpaCryptoFearGreedRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaCryptoQuoteRepository;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
 import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
@@ -33,7 +36,11 @@ import java.util.List;
  *  3. /api/v2/crypto?coin=...&range=max|3mo&interval=1d — daily price history stored in
  *     price_points (same table the generic /api/analysis/{symbol}/history chart reads from).
  *     Coins without any history get a full range=max backfill; the rest get an incremental
- *     3-month fetch, inserting only bars newer than the latest stored date.
+ *     3-month fetch, inserting only bars newer than the latest stored date. Synced twice:
+ *     in BRL under the coin symbol and in USD under "{coin}:USD" (brapi converts the whole
+ *     BRL series with a single spot rate, so the USD series is the authentic one).
+ *  4. api.alternative.me/fng — daily Crypto Fear & Greed Index (crypto_fear_greed table);
+ *     full backfill when the table is empty, otherwise last 30 readings.
  */
 @Component
 public class CryptoSyncScheduler {
@@ -44,22 +51,31 @@ public class CryptoSyncScheduler {
     private static final int FULL_HISTORY_BATCH_SIZE = 5;
     private static final int INCREMENTAL_HISTORY_BATCH_SIZE = 20;
 
+    /** price_points symbol suffix for the USD series (kept out of the tickers table). */
+    public static final String USD_SUFFIX = ":USD";
+
     private final BrapiAnalysisClient brapiClient;
+    private final FearGreedClient fearGreedClient;
     private final JpaCryptoCoinRepository coinRepo;
     private final JpaCryptoQuoteRepository quoteRepo;
     private final JpaTickerRepository tickerRepo;
     private final PriceHistoryRepository priceHistoryRepository;
+    private final JpaCryptoFearGreedRepository fearGreedRepo;
 
     public CryptoSyncScheduler(BrapiAnalysisClient brapiClient,
+                                FearGreedClient fearGreedClient,
                                 JpaCryptoCoinRepository coinRepo,
                                 JpaCryptoQuoteRepository quoteRepo,
                                 JpaTickerRepository tickerRepo,
-                                PriceHistoryRepository priceHistoryRepository) {
+                                PriceHistoryRepository priceHistoryRepository,
+                                JpaCryptoFearGreedRepository fearGreedRepo) {
         this.brapiClient = brapiClient;
+        this.fearGreedClient = fearGreedClient;
         this.coinRepo = coinRepo;
         this.quoteRepo = quoteRepo;
         this.tickerRepo = tickerRepo;
         this.priceHistoryRepository = priceHistoryRepository;
+        this.fearGreedRepo = fearGreedRepo;
     }
 
     @Value("${profitly.sync.on-startup:false}")
@@ -110,56 +126,62 @@ public class CryptoSyncScheduler {
         }
         log.info("Crypto sync complete: {}/{} quotes synced", quotesSynced, coins.size());
 
-        // Step 3: daily price history into price_points
-        syncPriceHistory(coins);
+        // Step 3: daily price history into price_points (BRL under coin, USD under coin:USD)
+        syncPriceHistory(coins, "BRL", "");
+        syncPriceHistory(coins, "USD", USD_SUFFIX);
+
+        // Step 4: Fear & Greed index
+        syncFearGreed();
     }
 
-    private void syncPriceHistory(List<String> coins) {
+    private void syncPriceHistory(List<String> coins, String currency, String symbolSuffix) {
         List<String> needsFullBackfill = new ArrayList<>();
         List<String> incremental = new ArrayList<>();
         for (String coin : coins) {
-            if (priceHistoryRepository.findLatestDateBySymbol(coin).isEmpty()) {
+            if (priceHistoryRepository.findLatestDateBySymbol(coin + symbolSuffix).isEmpty()) {
                 needsFullBackfill.add(coin);
             } else {
                 incremental.add(coin);
             }
         }
-        log.info("Crypto price history sync: {} full backfill, {} incremental",
-                needsFullBackfill.size(), incremental.size());
+        log.info("Crypto {} price history sync: {} full backfill, {} incremental",
+                currency, needsFullBackfill.size(), incremental.size());
 
         int barsSaved = 0;
         for (List<String> batch : partition(needsFullBackfill, FULL_HISTORY_BATCH_SIZE)) {
-            barsSaved += fetchAndStoreHistory(batch, "max");
+            barsSaved += fetchAndStoreHistory(batch, "max", currency, symbolSuffix);
         }
         for (List<String> batch : partition(incremental, INCREMENTAL_HISTORY_BATCH_SIZE)) {
-            barsSaved += fetchAndStoreHistory(batch, "3mo");
+            barsSaved += fetchAndStoreHistory(batch, "3mo", currency, symbolSuffix);
         }
-        log.info("Crypto price history sync complete: {} bars saved", barsSaved);
+        log.info("Crypto {} price history sync complete: {} bars saved", currency, barsSaved);
     }
 
-    private int fetchAndStoreHistory(List<String> batch, String range) {
+    private int fetchAndStoreHistory(List<String> batch, String range, String currency, String symbolSuffix) {
         List<BrapiCryptoResponse.CryptoQuote> quotes =
-                brapiClient.fetchCryptoQuotes(String.join(",", batch), range, "1d");
+                brapiClient.fetchCryptoQuotes(String.join(",", batch), range, "1d", currency);
         int saved = 0;
         for (BrapiCryptoResponse.CryptoQuote quote : quotes) {
             try {
-                saved += storeHistory(quote);
+                saved += storeHistory(quote, symbolSuffix);
             } catch (Exception e) {
-                log.warn("Failed to save crypto price history for {}: {}", quote.coin(), e.getMessage());
+                log.warn("Failed to save crypto price history for {}{}: {}",
+                        quote.coin(), symbolSuffix, e.getMessage());
             }
         }
         return saved;
     }
 
     /** Inserts only bars newer than the latest stored date (price_points has a unique symbol+date). */
-    private int storeHistory(BrapiCryptoResponse.CryptoQuote quote) {
+    private int storeHistory(BrapiCryptoResponse.CryptoQuote quote, String symbolSuffix) {
         if (quote.historicalDataPrice() == null || quote.historicalDataPrice().isEmpty()) return 0;
 
-        LocalDate latest = priceHistoryRepository.findLatestDateBySymbol(quote.coin()).orElse(null);
+        String symbol = quote.coin() + symbolSuffix;
+        LocalDate latest = priceHistoryRepository.findLatestDateBySymbol(symbol).orElse(null);
         List<PricePoint> points = quote.historicalDataPrice().stream()
                 .filter(b -> b.date() != null && b.close() != null)
                 .map(b -> new PricePoint(
-                        quote.coin(),
+                        symbol,
                         Instant.ofEpochSecond(b.date()).atZone(ZoneOffset.UTC).toLocalDate(),
                         b.open() != null ? BigDecimal.valueOf(b.open()) : null,
                         b.high() != null ? BigDecimal.valueOf(b.high()) : null,
@@ -175,6 +197,31 @@ public class CryptoSyncScheduler {
             priceHistoryRepository.saveAll(points);
         }
         return points.size();
+    }
+
+    /** Full backfill on empty table, otherwise the last 30 daily readings. */
+    private void syncFearGreed() {
+        int limit = fearGreedRepo.count() == 0 ? 0 : 30;
+        var entries = fearGreedClient.fetchIndex(limit);
+        if (entries.isEmpty()) {
+            log.warn("Fear & Greed index returned no data — skipping");
+            return;
+        }
+        Instant now = Instant.now();
+        int saved = 0;
+        for (var entry : entries) {
+            try {
+                LocalDate date = Instant.ofEpochSecond(Long.parseLong(entry.timestamp()))
+                        .atZone(ZoneOffset.UTC).toLocalDate();
+                int value = Integer.parseInt(entry.value());
+                fearGreedRepo.save(new CryptoFearGreedJpaEntity(date, value, entry.valueClassification(), now));
+                saved++;
+            } catch (Exception e) {
+                log.warn("Skipping malformed Fear & Greed entry [{} @ {}]: {}",
+                        entry.value(), entry.timestamp(), e.getMessage());
+            }
+        }
+        log.info("Fear & Greed index synced: {} readings", saved);
     }
 
     private void saveQuote(BrapiCryptoResponse.CryptoQuote quote) {

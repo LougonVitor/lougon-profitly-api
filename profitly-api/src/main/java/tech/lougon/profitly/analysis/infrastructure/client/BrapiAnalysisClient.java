@@ -533,12 +533,18 @@ public class BrapiAnalysisClient {
 
     /** Fetches BRL quotes with optional daily price history (range=max|1mo|..., interval=1d). */
     public List<BrapiCryptoResponse.CryptoQuote> fetchCryptoQuotes(String coins, String range, String interval) {
+        return fetchCryptoQuotes(coins, range, interval, "BRL");
+    }
+
+    /** Fetches quotes in the given currency (BRL/USD) with optional daily price history. */
+    public List<BrapiCryptoResponse.CryptoQuote> fetchCryptoQuotes(String coins, String range,
+                                                                    String interval, String currency) {
         try {
             BrapiCryptoResponse response = webClient.get()
                     .uri(u -> {
                         u.path("/api/v2/crypto")
                                 .queryParam("coin", coins)
-                                .queryParam("currency", "BRL");
+                                .queryParam("currency", currency);
                         if (range != null) u.queryParam("range", range);
                         if (interval != null) u.queryParam("interval", interval);
                         return u.build();
@@ -549,7 +555,7 @@ public class BrapiAnalysisClient {
             if (response == null || response.coins() == null) return List.of();
             return response.coins().stream().filter(c -> c != null && c.coin() != null).toList();
         } catch (Exception e) {
-            log.warn("Failed to fetch crypto quotes for [{}]: {}", coins, e.getMessage());
+            log.warn("Failed to fetch crypto quotes for [{}] in {}: {}", coins, currency, e.getMessage());
             return List.of();
         }
     }
