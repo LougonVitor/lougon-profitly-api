@@ -27,6 +27,7 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - PowerShell `Get-Content`+`Set-Content` corrompe UTF-8 dos fontes — usar as ferramentas Edit/Write
 - Bancos não reportam EBIT/netIncome/marketCap: usar fallbacks (`cleanEbit`, `netIncomeFromContinuingOps`, `netIncomeApplicableToCommonShares`) e aceitar nulos
 - brapi: `/api/v2/fii/list` e `/treasury/list` aceitam `limit=10000` (uma chamada traz tudo); `/api/v2/tickers` pagina com `subType=stock|unit|bdr|fidc|fip`; `/funds/list?assetType=` só tem fiagro/fiinfra
+- brapi crypto (`/api/v2/crypto`): `marketCap` vem SEMPRE 0 (ranquear por volume); aceita `range`/`interval` mas `range=max` limita a ~1000 barras diárias (~2,7 anos); volume do histórico vem em unidades da moeda (fracionário), o da cotação em BRL; `currencyRateFromUSD` dá o câmbio usado
 
 ## Convenções de trabalho
 
@@ -35,8 +36,15 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - Testes de parse de DTO em `BrapiDtoParseTest` — adicionar um caso ao criar DTO novo
 - UI em pt-BR; seções somem quando não há dados (nunca mostrar card vazio)
 
+## Cripto
+
+- Histórico diário das moedas vai para `price_points` (mesma tabela das ações, chaveado pelo símbolo da moeda) — o gráfico genérico `/api/analysis/{symbol}/history` funciona sem código novo
+- `CryptoSyncScheduler` (19h50 BRT): catálogo → cotações (lotes de 20) → histórico (backfill `range=max` em lotes de 5 para moedas sem histórico; incremental `3mo` em lotes de 20 para o resto, inserindo só barras novas)
+- `/api/crypto/analysis/{coin}` (`CryptoAnalysisService`): retornos por período, volatilidade anualizada (√365, cripto negocia todo dia), max drawdown 1a, ATH, faixa 52s, SMA50/200, ranking por volume — tudo calculado do banco
+- **`profitly.sync.crypto-on-startup=true` é TEMPORÁRIO** (dev da tela de cripto) — voltar para false ao concluir
+
 ## Estado (2026-07-05)
 
-- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo
-- **Frente atual:** tela de criptoativos (dados já em `crypto_coins`/`crypto_quotes`, endpoints `/api/crypto/*`)
-- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile
+- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (análise avançada com retornos, risco, ATH, médias móveis, preço USD)
+- **Frente atual:** refinamento da tela de criptoativos
+- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile; desativar `profitly.sync.crypto-on-startup` ao fim do dev de cripto
