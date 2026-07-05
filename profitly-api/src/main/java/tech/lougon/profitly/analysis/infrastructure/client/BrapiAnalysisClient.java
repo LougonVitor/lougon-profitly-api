@@ -455,6 +455,32 @@ public class BrapiAnalysisClient {
         }
     }
 
+    /**
+     * Fetches yearly indicator history for comma-separated symbols.
+     * endpoint: "statistics" | "financial-data" (mode=history returns one row per year,
+     * same generic shape as the statement endpoints).
+     */
+    public List<BrapiStockStatementsResponse.Result> fetchIndicatorHistory(String endpoint, String symbols) {
+        try {
+            BrapiStockStatementsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/v2/stocks/" + endpoint)
+                            .queryParam("symbols", symbols)
+                            .queryParam("mode", "history")
+                            .queryParam("period", "annual")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiStockStatementsResponse.class)
+                    .block();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.data() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch {} history for [{}]: {}", endpoint, symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
     /** Fetches all available coin symbols from /api/v2/crypto/available. */
     public List<String> fetchCryptoAvailable() {
         try {

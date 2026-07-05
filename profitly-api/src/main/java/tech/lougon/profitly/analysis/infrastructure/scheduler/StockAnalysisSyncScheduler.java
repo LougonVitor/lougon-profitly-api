@@ -112,6 +112,8 @@ public class StockAnalysisSyncScheduler {
                     syncStatements(endpoint, joined, "annual");
                     syncStatements(endpoint, joined, "quarterly");
                 }
+                syncIndicatorHistory("statistics", "indicators_statistics", joined);
+                syncIndicatorHistory("financial-data", "indicators_financial", joined);
             } catch (Exception e) {
                 log.warn("Stock analysis batch {}/{} failed: {}", batchIndex, batches.size(), e.getMessage());
             }
@@ -256,6 +258,34 @@ public class StockAnalysisSyncScheduler {
                 }
             }
             saveSplits(r.symbol(), r.data().stockDividends());
+        }
+    }
+
+    /** Yearly indicator history (statistics/financial-data mode=history) stored as raw rows. */
+    private void syncIndicatorHistory(String endpoint, String statementType, String symbols) {
+        for (BrapiStockStatementsResponse.Result r : brapiClient.fetchIndicatorHistory(endpoint, symbols)) {
+            for (Map<String, Object> row : r.data()) {
+                if (row == null || row.get("endDate") == null) continue;
+                String endDate = String.valueOf(row.get("endDate"));
+                String periodType = row.get("type") != null ? String.valueOf(row.get("type")) : "yearly";
+                try {
+                    StockStatementJpaEntity e = statementRepo
+                            .findBySymbolAndStatementTypeAndPeriodTypeAndEndDate(r.symbol(), statementType, periodType, endDate)
+                            .orElseGet(() -> {
+                                var s = new StockStatementJpaEntity();
+                                s.setSymbol(r.symbol());
+                                s.setStatementType(statementType);
+                                s.setPeriodType(periodType);
+                                s.setEndDate(endDate);
+                                return s;
+                            });
+                    e.setRawJson(JSON.writeValueAsString(row));
+                    e.setSyncedAt(Instant.now());
+                    statementRepo.save(e);
+                } catch (Exception ex) {
+                    log.warn("Failed to save {} {} for {}: {}", statementType, endDate, r.symbol(), ex.getMessage());
+                }
+            }
         }
     }
 

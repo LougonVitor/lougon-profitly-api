@@ -41,6 +41,16 @@ public class StockAnalysisController {
         return ResponseEntity.ok(service.getKeyIndicators(symbol.toUpperCase()));
     }
 
+    /** Yearly history of fundamental indicators (from statistics/financial-data mode=history). */
+    @GetMapping("/{symbol}/indicator-history")
+    public ResponseEntity<Map<String, Object>> getIndicatorHistory(@PathVariable String symbol) {
+        String s = symbol.toUpperCase();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("statistics", service.getStatements(s, "indicators_statistics"));
+        body.put("financialData", service.getStatements(s, "indicators_financial"));
+        return ResponseEntity.ok(body);
+    }
+
     @GetMapping("/{symbol}/quote")
     public ResponseEntity<?> getQuote(@PathVariable String symbol) {
         return service.getQuote(symbol.toUpperCase())
