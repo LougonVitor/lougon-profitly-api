@@ -549,6 +549,39 @@ class BrapiDtoParseTest {
     }
 
     @Test
+    void fearGreed_parsesStringNumbersFromAlternativeMe() throws Exception {
+        // api.alternative.me/fng — numeric fields arrive as strings
+        String json = """
+                {
+                  "name": "Fear and Greed Index",
+                  "data": [
+                    {
+                      "value": "23",
+                      "value_classification": "Extreme Fear",
+                      "timestamp": "1783209600",
+                      "time_until_update": "23251"
+                    },
+                    {
+                      "value": "72",
+                      "value_classification": "Greed",
+                      "timestamp": "1783123200"
+                    }
+                  ],
+                  "metadata": { "error": null }
+                }
+                """;
+
+        AlternativeMeFngResponse response = mapper.readValue(json, AlternativeMeFngResponse.class);
+
+        assertThat(response.data()).hasSize(2);
+        var entry = response.data().get(0);
+        assertThat(entry.value()).isEqualTo("23");
+        assertThat(entry.valueClassification()).isEqualTo("Extreme Fear");
+        assertThat(entry.timestamp()).isEqualTo("1783209600");
+        assertThat(response.data().get(1).valueClassification()).isEqualTo("Greed");
+    }
+
+    @Test
     void stockStatements_preservesAllFieldsAsRawJson() throws Exception {
         String json = """
                 {
