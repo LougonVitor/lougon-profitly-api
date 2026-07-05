@@ -147,10 +147,15 @@ public class TreasurySyncScheduler {
         TickerJpaEntity ticker = tickerRepo.findBySymbol(item.symbol())
                 .orElseGet(TickerJpaEntity::new);
 
-        // e.g. "Tesouro IPCA+ 2029" — maturity year makes bonds distinguishable in search
+        // e.g. "Tesouro IPCA+ 2029" — official naming year makes bonds distinguishable in search
         String name = item.bondType() != null ? item.bondType() : item.symbol();
         if (item.bondType() != null && item.maturityDate() != null && item.maturityDate().length() >= 4) {
-            name = item.bondType() + " " + item.maturityDate().substring(0, 4);
+            try {
+                int year = Integer.parseInt(item.maturityDate().substring(0, 4));
+                name = item.bondType() + " " + (year - incomeYearsBeforeMaturity(item.bondType()));
+            } catch (NumberFormatException e) {
+                name = item.bondType();
+            }
         }
         // sub_type column is varchar(30) — store only the indexer code (e.g. "ipca", "selic")
         String subType = item.indexer() != null ? item.indexer() : null;
@@ -166,6 +171,19 @@ public class TreasurySyncScheduler {
         }
         ticker.setSyncedAt(Instant.now());
         tickerRepo.save(ticker);
+    }
+
+    /**
+     * Renda+/Educa+ official names use the year the income phase STARTS, while brapi's
+     * maturityDate is the last payment: Renda+ pays 240 monthly installments (first one
+     * 19 years before maturity), Educa+ pays 60 (4 years before). Ex.: maturity 2084 ⇒
+     * "Tesouro Renda+ Aposentadoria Extra 2065".
+     */
+    private static int incomeYearsBeforeMaturity(String bondType) {
+        String t = bondType.toLowerCase();
+        if (t.contains("renda+")) return 19;
+        if (t.contains("educa+")) return 4;
+        return 0;
     }
 
     /**
