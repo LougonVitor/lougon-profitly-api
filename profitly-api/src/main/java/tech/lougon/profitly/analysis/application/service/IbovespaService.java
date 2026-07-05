@@ -20,7 +20,7 @@ public class IbovespaService {
 
     private static final Logger log = LoggerFactory.getLogger(IbovespaService.class);
     private static final String IBOV_SYMBOL = "^BVSP";
-    private static final List<String> ALL_RANGES = List.of("1d", "5d", "1m", "3m", "6m", "1y", "5y");
+    private static final List<String> ALL_RANGES = List.of("1d", "5d", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "max");
 
     private final BrapiAnalysisClient client;
     private final JpaIbovespaCacheRepository cacheRepository;
