@@ -248,7 +248,8 @@ public class BrapiAnalysisClient {
         }
     }
 
-    public List<BrapiTreasuryIndicatorsResponse.TreasuryIndicator> fetchTreasuryIndicators(String symbols) {
+    /** Up to 20 symbols per call, comma-separated. Same item shape as /treasury/list. */
+    public List<BrapiTreasuryListResponse.TreasuryItem> fetchTreasuryIndicators(String symbols) {
         try {
             BrapiTreasuryIndicatorsResponse response = webClient.get()
                     .uri(u -> u.path("/api/v2/treasury/indicators")
@@ -257,21 +258,26 @@ public class BrapiAnalysisClient {
                     .retrieve()
                     .bodyToMono(BrapiTreasuryIndicatorsResponse.class)
                     .block();
-            if (response == null || response.treasuries() == null) return List.of();
-            return response.treasuries().stream().filter(t -> t != null && t.symbol() != null).toList();
+            if (response == null || response.results() == null) return List.of();
+            return response.results().stream().filter(t -> t != null && t.symbol() != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch treasury indicators for [{}]: {}", symbols, e.getMessage());
             return List.of();
         }
     }
 
-    public List<BrapiTreasuryHistoryResponse.TreasuryHistoryEntry> fetchTreasuryHistory(
-            String symbol, String startDate, String endDate) {
+    /**
+     * Daily rate/price series for up to 20 comma-separated symbols in one call.
+     * Each result carries its own nested history keyed by baseDate.
+     */
+    public List<BrapiTreasuryHistoryResponse.TreasuryHistoryResult> fetchTreasuryHistory(
+            String symbols, String startDate, String endDate) {
         try {
             BrapiTreasuryHistoryResponse response = webClient.get()
                     .uri(u -> {
                         var b = u.path("/api/v2/treasury/indicators/history")
-                                .queryParam("symbols", symbol);
+                                .queryParam("symbols", symbols)
+                                .queryParam("sortOrder", "asc");
                         if (startDate != null) b = b.queryParam("startDate", startDate);
                         if (endDate != null) b = b.queryParam("endDate", endDate);
                         return b.build();
@@ -280,9 +286,9 @@ public class BrapiAnalysisClient {
                     .bodyToMono(BrapiTreasuryHistoryResponse.class)
                     .block();
             if (response == null || response.results() == null) return List.of();
-            return response.results().stream().filter(e -> e != null && e.referenceDate() != null).toList();
+            return response.results().stream().filter(r -> r != null && r.symbol() != null).toList();
         } catch (Exception e) {
-            log.warn("Failed to fetch treasury history for {}: {}", symbol, e.getMessage());
+            log.warn("Failed to fetch treasury history for [{}]: {}", symbols, e.getMessage());
             return List.of();
         }
     }

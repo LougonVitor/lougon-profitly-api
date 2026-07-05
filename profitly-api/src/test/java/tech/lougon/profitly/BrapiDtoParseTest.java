@@ -202,12 +202,17 @@ class BrapiDtoParseTest {
                       "couponType": "semestral",
                       "maturityDate": "2026-08-15",
                       "durationDays": 44,
+                      "baseDate": "2026-05-15",
                       "buyRate": 11.4,
                       "sellRate": 11.52,
                       "buyPrice": 4816.98,
                       "sellPrice": 4813.73,
                       "basePrice": 4813.73,
-                      "rateInfo": { "rateType": "realAnnualRateOverIpca" }
+                      "rateInfo": {
+                        "rateType": "realAnnualRateOverIpca",
+                        "rateUnit": "% a.a.",
+                        "description": "Rentabilidade real acima do IPCA"
+                      }
                     }
                   ]
                 }
@@ -223,24 +228,65 @@ class BrapiDtoParseTest {
         assertThat(item.couponType()).isEqualTo("semestral");
         assertThat(item.maturityDate()).isEqualTo("2026-08-15");
         assertThat(item.durationDays()).isEqualTo(44);
+        assertThat(item.baseDate()).isEqualTo("2026-05-15");
         assertThat(item.buyRate()).isEqualTo(11.4);
         assertThat(item.buyPrice()).isEqualTo(4816.98);
+        assertThat(item.rateInfo().rateType()).isEqualTo("realAnnualRateOverIpca");
+        assertThat(item.rateInfo().rateUnit()).isEqualTo("% a.a.");
     }
 
     @Test
-    void treasuryHistory_parsesHistoricalRates() throws Exception {
-        // History endpoint also uses "results" as root key
+    void treasuryIndicators_parsesResultsRootKey() throws Exception {
+        // /api/v2/treasury/indicators uses "results" (not "treasuries") with the same item shape as /list
         String json = """
                 {
                   "results": [
                     {
                       "symbol": "tesouro-selic-01032031",
-                      "referenceDate": "2025-06-01",
-                      "buyRate": 12.20,
-                      "sellRate": 12.15,
-                      "buyPrice": 14100.00,
-                      "sellPrice": 14095.00,
-                      "basePrice": 14080.00
+                      "bondType": "Tesouro Selic",
+                      "indexer": "selic",
+                      "buyRate": 0.08,
+                      "sellRate": 0.09,
+                      "buyPrice": 18944.78
+                    }
+                  ]
+                }
+                """;
+
+        BrapiTreasuryIndicatorsResponse response = mapper.readValue(json, BrapiTreasuryIndicatorsResponse.class);
+
+        assertThat(response.results()).hasSize(1);
+        assertThat(response.results().get(0).symbol()).isEqualTo("tesouro-selic-01032031");
+        assertThat(response.results().get(0).buyRate()).isEqualTo(0.08);
+    }
+
+    @Test
+    void treasuryHistory_parsesNestedHistoryPerSymbol() throws Exception {
+        // History endpoint returns one result per symbol, each with a nested "history" array keyed by baseDate
+        String json = """
+                {
+                  "results": [
+                    {
+                      "symbol": "tesouro-selic-01032031",
+                      "bondType": "Tesouro Selic",
+                      "indexer": "selic",
+                      "couponType": "zero",
+                      "maturityDate": "2031-03-01",
+                      "rateInfo": {
+                        "rateType": "spreadOverSelic",
+                        "rateUnit": "% a.a.",
+                        "description": "Spread sobre a Selic"
+                      },
+                      "history": [
+                        {
+                          "baseDate": "2026-05-15",
+                          "buyRate": 0.08,
+                          "sellRate": 0.09,
+                          "buyPrice": 18944.78,
+                          "sellPrice": 18925.53,
+                          "basePrice": 18925.53
+                        }
+                      ]
                     }
                   ]
                 }
@@ -249,10 +295,15 @@ class BrapiDtoParseTest {
         BrapiTreasuryHistoryResponse response = mapper.readValue(json, BrapiTreasuryHistoryResponse.class);
 
         assertThat(response.results()).hasSize(1);
-        BrapiTreasuryHistoryResponse.TreasuryHistoryEntry entry = response.results().get(0);
-        assertThat(entry.referenceDate()).isEqualTo("2025-06-01");
-        assertThat(entry.buyRate()).isEqualTo(12.20);
-        assertThat(entry.buyPrice()).isEqualTo(14100.00);
+        BrapiTreasuryHistoryResponse.TreasuryHistoryResult result = response.results().get(0);
+        assertThat(result.symbol()).isEqualTo("tesouro-selic-01032031");
+        assertThat(result.rateInfo().rateType()).isEqualTo("spreadOverSelic");
+        assertThat(result.history()).hasSize(1);
+
+        BrapiTreasuryHistoryResponse.TreasuryHistoryEntry entry = result.history().get(0);
+        assertThat(entry.baseDate()).isEqualTo("2026-05-15");
+        assertThat(entry.buyRate()).isEqualTo(0.08);
+        assertThat(entry.buyPrice()).isEqualTo(18944.78);
     }
 
     // ── Fund List ─────────────────────────────────────────────────────────────

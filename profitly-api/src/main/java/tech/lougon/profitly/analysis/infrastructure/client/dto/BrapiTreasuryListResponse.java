@@ -14,10 +14,12 @@ public record BrapiTreasuryListResponse(List<TreasuryItem> results) {
             String couponType,
             String maturityDate,
             Integer durationDays,
+            String baseDate,
             Double buyRate,
             Double sellRate,
             Double buyPrice,
             Double sellPrice,
-            Double basePrice
+            Double basePrice,
+            BrapiTreasuryRateInfo rateInfo
     ) {}
 }

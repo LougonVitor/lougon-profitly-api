@@ -44,6 +44,18 @@ public class TreasuryBondJpaEntity {
     @Column(name = "duration_days")
     private Integer durationDays;
 
+    @Column(name = "base_date", length = 20)
+    private String baseDate;
+
+    @Column(name = "rate_type", length = 40)
+    private String rateType;
+
+    @Column(name = "rate_unit", length = 20)
+    private String rateUnit;
+
+    @Column(name = "rate_description", length = 400)
+    private String rateDescription;
+
     @Column(name = "synced_at", nullable = false)
     private Instant syncedAt;
 
@@ -73,6 +85,14 @@ public class TreasuryBondJpaEntity {
     public void setBasePrice(Double v) { this.basePrice = v; }
     public Integer getDurationDays() { return durationDays; }
     public void setDurationDays(Integer v) { this.durationDays = v; }
+    public String getBaseDate() { return baseDate; }
+    public void setBaseDate(String v) { this.baseDate = v; }
+    public String getRateType() { return rateType; }
+    public void setRateType(String v) { this.rateType = v; }
+    public String getRateUnit() { return rateUnit; }
+    public void setRateUnit(String v) { this.rateUnit = v; }
+    public String getRateDescription() { return rateDescription; }
+    public void setRateDescription(String v) { this.rateDescription = v; }
     public Instant getSyncedAt() { return syncedAt; }
     public void setSyncedAt(Instant v) { this.syncedAt = v; }
 }

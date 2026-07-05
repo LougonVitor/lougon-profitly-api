@@ -21,6 +21,7 @@ import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,6 +30,10 @@ import java.util.stream.Collectors;
 public class TreasurySyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(TreasurySyncScheduler.class);
+
+    /** brapi caps /treasury/indicators/history at 20 symbols per call. */
+    private static final int HISTORY_BATCH_SIZE = 20;
+    private static final String BACKFILL_START_DATE = "2020-01-01";
 
     private final BrapiAnalysisClient brapiClient;
     private final JpaTreasuryBondRepository bondRepo;
@@ -48,10 +53,14 @@ public class TreasurySyncScheduler {
     @Value("${profitly.sync.on-startup:false}")
     private boolean syncOnStartup;
 
+    // Dev-only flag while the treasury screen is under construction — turn off when done
+    @Value("${profitly.sync.treasury-on-startup:false}")
+    private boolean treasurySyncOnStartup;
+
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void syncOnStartup() {
-        if (!syncOnStartup) return;
+        if (!syncOnStartup && !treasurySyncOnStartup) return;
         log.info("Running treasury startup sync");
         syncAll();
     }
@@ -78,6 +87,11 @@ public class TreasurySyncScheduler {
             }
         }
         log.info("Treasury sync complete: {}/{}", synced, list.size());
+
+        syncAllHistories(list.stream()
+                .map(BrapiTreasuryListResponse.TreasuryItem::symbol)
+                .filter(s -> s != null)
+                .toList());
     }
 
     private void saveCurrent(BrapiTreasuryListResponse.TreasuryItem item) {
@@ -91,11 +105,17 @@ public class TreasurySyncScheduler {
         entity.setCouponType(item.couponType());
         entity.setMaturityDate(item.maturityDate());
         entity.setDurationDays(item.durationDays());
+        entity.setBaseDate(item.baseDate());
         entity.setBuyRate(item.buyRate());
         entity.setSellRate(item.sellRate());
         entity.setBuyPrice(item.buyPrice());
         entity.setSellPrice(item.sellPrice());
         entity.setBasePrice(item.basePrice());
+        if (item.rateInfo() != null) {
+            entity.setRateType(item.rateInfo().rateType());
+            entity.setRateUnit(item.rateInfo().rateUnit());
+            entity.setRateDescription(item.rateInfo().description());
+        }
         entity.setSyncedAt(Instant.now());
 
         bondRepo.save(entity);
@@ -126,27 +146,59 @@ public class TreasurySyncScheduler {
         tickerRepo.save(ticker);
     }
 
-    private void syncHistory(String symbol) {
-        boolean firstSync = historyRepo.countBySymbol(symbol) == 0;
-        String startDate = firstSync ? "2020-01-01" : LocalDate.now().minusMonths(3).toString();
+    /**
+     * Syncs the daily rate/price series of every bond. Bonds without stored history get
+     * a full backfill since 2020; the rest only fetch the last 3 months. Both paths run
+     * in batches of up to 20 symbols per brapi call.
+     */
+    private void syncAllHistories(List<String> symbols) {
+        List<String> backfill = new ArrayList<>();
+        List<String> incremental = new ArrayList<>();
+        for (String symbol : symbols) {
+            if (historyRepo.countBySymbol(symbol) == 0) backfill.add(symbol);
+            else incremental.add(symbol);
+        }
+        log.info("Treasury history sync: {} backfill, {} incremental", backfill.size(), incremental.size());
 
-        List<BrapiTreasuryHistoryResponse.TreasuryHistoryEntry> entries =
-                brapiClient.fetchTreasuryHistory(symbol, startDate, null);
-        if (entries.isEmpty()) return;
+        int saved = 0;
+        saved += syncHistoryBatches(backfill, BACKFILL_START_DATE);
+        saved += syncHistoryBatches(incremental, LocalDate.now().minusMonths(3).toString());
+        log.info("Treasury history sync complete: {} new entries", saved);
+    }
 
-        Set<String> existingDates = historyRepo.findBySymbolOrderByReferenceDateAsc(symbol)
+    private int syncHistoryBatches(List<String> symbols, String startDate) {
+        int saved = 0;
+        for (int i = 0; i < symbols.size(); i += HISTORY_BATCH_SIZE) {
+            List<String> batch = symbols.subList(i, Math.min(i + HISTORY_BATCH_SIZE, symbols.size()));
+            try {
+                List<BrapiTreasuryHistoryResponse.TreasuryHistoryResult> results =
+                        brapiClient.fetchTreasuryHistory(String.join(",", batch), startDate, null);
+                for (var result : results) {
+                    saved += saveHistory(result);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to sync treasury history batch [{}...]: {}", batch.get(0), e.getMessage());
+            }
+        }
+        return saved;
+    }
+
+    private int saveHistory(BrapiTreasuryHistoryResponse.TreasuryHistoryResult result) {
+        if (result.history() == null || result.history().isEmpty()) return 0;
+
+        Set<String> existingDates = historyRepo.findBySymbolOrderByReferenceDateAsc(result.symbol())
                 .stream().map(TreasuryBondHistoryJpaEntity::getReferenceDate)
                 .collect(Collectors.toSet());
 
         Instant now = Instant.now();
-        for (var e : entries) {
-            if (e.referenceDate() == null) continue;
-            String refDate = e.referenceDate().length() > 10
-                    ? e.referenceDate().substring(0, 10) : e.referenceDate();
-            if (existingDates.contains(refDate)) continue;
+        List<TreasuryBondHistoryJpaEntity> toSave = new ArrayList<>();
+        for (var e : result.history()) {
+            if (e.baseDate() == null) continue;
+            String refDate = e.baseDate().length() > 10 ? e.baseDate().substring(0, 10) : e.baseDate();
+            if (!existingDates.add(refDate)) continue;
 
             var entity = new TreasuryBondHistoryJpaEntity();
-            entity.setSymbol(symbol);
+            entity.setSymbol(result.symbol());
             entity.setReferenceDate(refDate);
             entity.setBuyRate(e.buyRate());
             entity.setSellRate(e.sellRate());
@@ -154,8 +206,9 @@ public class TreasurySyncScheduler {
             entity.setSellPrice(e.sellPrice());
             entity.setBasePrice(e.basePrice());
             entity.setSyncedAt(now);
-            historyRepo.save(entity);
-            existingDates.add(refDate);
+            toSave.add(entity);
         }
+        historyRepo.saveAll(toSave);
+        return toSave.size();
     }
 }
