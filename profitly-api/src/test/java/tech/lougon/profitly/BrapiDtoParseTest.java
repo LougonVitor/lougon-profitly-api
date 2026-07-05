@@ -429,6 +429,41 @@ class BrapiDtoParseTest {
     }
 
     @Test
+    void legacyDividends_parsesUnitDividends() throws Exception {
+        // legacy /api/quote/{symbol}?dividends=true — fallback for units (SANB11 etc.)
+        String json = """
+                {
+                  "results": [
+                    {
+                      "symbol": "SANB11",
+                      "dividendsData": {
+                        "cashDividends": [
+                          {
+                            "assetIssued": "BRSANBCDAM13",
+                            "paymentDate": "2026-05-07T03:00:00.000Z",
+                            "rate": 0.534701,
+                            "relatedTo": "1º Trimestre",
+                            "label": "JCP",
+                            "lastDatePrior": "2026-04-20T03:00:00.000Z"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """;
+
+        BrapiLegacyDividendsResponse response = mapper.readValue(json, BrapiLegacyDividendsResponse.class);
+
+        assertThat(response.results()).hasSize(1);
+        var div = response.results().get(0).dividendsData().cashDividends().get(0);
+        assertThat(response.results().get(0).symbol()).isEqualTo("SANB11");
+        assertThat(div.rate()).isEqualTo(0.534701);
+        assertThat(div.label()).isEqualTo("JCP");
+        assertThat(div.lastDatePrior()).isEqualTo("2026-04-20T03:00:00.000Z");
+    }
+
+    @Test
     void stockStatements_preservesAllFieldsAsRawJson() throws Exception {
         String json = """
                 {

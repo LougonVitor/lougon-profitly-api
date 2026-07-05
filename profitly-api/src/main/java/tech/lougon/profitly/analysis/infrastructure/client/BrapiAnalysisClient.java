@@ -22,6 +22,7 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiCryptoRespon
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockQuoteResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockProfileResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiStockStatementsResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiLegacyDividendsResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -424,7 +425,35 @@ public class BrapiAnalysisClient {
                         .toList();
                 return List.of(new BrapiDividendsResponse.Result(symbols, new BrapiDividendsResponse.Data(cash, List.of())));
             }
+            // Units are not FIIs, so the FII endpoint comes back empty too. The legacy
+            // /api/quote endpoint has no "ends with 11" heuristic and returns real data.
+            List<BrapiDividendsResponse.CashDividend> legacy = fetchLegacyDividends(symbols);
+            if (!legacy.isEmpty()) {
+                return List.of(new BrapiDividendsResponse.Result(symbols, new BrapiDividendsResponse.Data(legacy, List.of())));
+            }
             log.warn("Failed to fetch dividends for [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Legacy v1 endpoint: /api/quote/{symbol}?dividends=true — single symbol only. */
+    private List<BrapiDividendsResponse.CashDividend> fetchLegacyDividends(String symbol) {
+        try {
+            BrapiLegacyDividendsResponse response = webClient.get()
+                    .uri(u -> u.path("/api/quote/" + symbol)
+                            .queryParam("dividends", "true")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiLegacyDividendsResponse.class)
+                    .block();
+            if (response == null || response.results() == null || response.results().isEmpty()) return List.of();
+            var data = response.results().get(0).dividendsData();
+            if (data == null || data.cashDividends() == null) return List.of();
+            return data.cashDividends().stream()
+                    .filter(d -> d != null && d.rate() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Legacy dividends fallback failed for {}: {}", symbol, e.getMessage());
             return List.of();
         }
     }
