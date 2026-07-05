@@ -54,10 +54,10 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - **Renda+/Educa+ NÃO usam o ano do vencimento no nome oficial**: o `maturityDate` da brapi é a ÚLTIMA parcela; o nome usa o ano em que a renda começa (Renda+ = vencimento − 19, são 240 parcelas mensais; Educa+ = vencimento − 4, são 60). Ex.: vencimento 2084 = "Renda+ 2065". Cálculo em `incomeYearsBeforeMaturity` (scheduler) e `treasuryIncomeYears` (frontend)
 - `/api/treasury/analysis/{symbol}` (`TreasuryAnalysisService`): variação da taxa por período (p.p.), faixa 52s da taxa, extremos históricos, retornos de marcação a mercado (sellPrice), volatilidade anualizada √252 (pregões), drawdown 1a, ranking por taxa dentro do indexador, títulos irmãos — tudo do banco
 - Tela segue o layout da de cripto: barra de 5 métricas, gráfico com toggle de métrica + ranges 3M–Máx, grids de variação/retornos, cards de risco/extremos, tabela clicável de títulos do mesmo indexador
-- **`profitly.sync.treasury-on-startup=true` é TEMPORÁRIO** (dev da tela de tesouro) — voltar para false ao concluir
+- `profitly.sync.treasury-on-startup=false` — ligar só durante dev ativo da tela de tesouro (cron das 19h45 mantém os dados)
 
 ## Estado (2026-07-05)
 
-- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC), tela de Tesouro Direto (histórico de taxas, faixa 52s, marcação a mercado, comparação por indexador)
-- **Frente atual:** refinamento da tela de Tesouro Direto
-- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile; desativar `profitly.sync.treasury-on-startup` ao fim do dev de tesouro
+- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC), tela de Tesouro Direto (histórico de taxas, faixa 52s, marcação a mercado, comparação por indexador, nomes oficiais Renda+/Educa+)
+- **Frente atual:** tela de fundos (fiagro/fidc/fip/fi-infra)
+- **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile
