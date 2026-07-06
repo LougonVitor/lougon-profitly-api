@@ -56,8 +56,20 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - Tela segue o layout da de cripto: barra de 5 métricas, gráfico com toggle de métrica + ranges 3M–Máx, grids de variação/retornos, cards de risco/extremos, tabela clicável de títulos do mesmo indexador
 - `profitly.sync.treasury-on-startup=false` — ligar só durante dev ativo da tela de tesouro (cron das 19h45 mantém os dados)
 
-## Estado (2026-07-05)
+## Fundos listados (FIAGRO / FI-Infra / FIDC / FIP)
 
-- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC), tela de Tesouro Direto (histórico de taxas, faixa 52s, marcação a mercado, comparação por indexador, nomes oficiais Renda+/Educa+)
-- **Frente atual:** tela de fundos (fiagro/fidc/fip/fi-infra)
+- **Cobertura brapi é desigual**: `/api/v2/funds/list?assetType=` só tem fiagro (~31) e fiinfra (só JURO11!); fidc/fip retornam vazio mesmo por `symbols=`. Os listados na B3 (BDIV11, XPIE11...) são semeados da tabela `tickers` (`asset_type=fund`, `sub_type` em fiagro/fi-agro/fiinfra/fi-infra/fidc/fip — normalizar variantes de grafia!). NUNCA semear todos os `asset_type=fund`: inclui 175 ETFs + 46 FIIs
+- `/funds/dividends?symbols=` funciona para TODOS os fundos listados (até fidc/fip fora do list) e traz `cnpj`/`assetType` — usado para enriquecer o catálogo. DY 12m/1m é calculado dos eventos ÷ preço (brapi manda null)
+- `/funds/nav/history` só tem dados de fundos-FIF (JURO11 diário); fiagro/fip não têm — a tela degrada (seções somem). Resposta é lista PLANA (`history[]`, um item por símbolo+data) com paginação, diferente do tesouro
+- Histórico de PREÇO de mercado vem de `/api/v2/stocks/historical` (funciona para qualquer ticker de fundo) → vai para `price_points` → gráfico genérico `/api/analysis/{symbol}/history` serve sem código novo
+- Documentos regulatórios (profile, portfolio, fiagro/fidc reports+portfolio, fip reports) ficam como raw JSON em `fund_documents` (symbol + doc_type + reference_date); shapes variam por tipo — DTO genérico `BrapiFundRawListResponse` com `Map<String,Object>` e `@JsonAlias({"funds","profiles","reports"})`
+- `FundSyncScheduler` (19h40 BRT): list → seed tickers → indicators (lotes 20) → NAV history (backfill 2020/incremental 3m) → dividendos (backfill total/incremental 3m) → DY calculado → documentos → preço de mercado (backfill max/incremental 3mo) → variação diária do ticker (últimos 2 fechamentos, fallback NAV)
+- `/api/funds/analysis/{symbol}` (`FundAnalysisService`): retornos de preço E de NAV por período, vol √252 de ambos, drawdown, faixa 52s, extremos de NAV, evolução patrimônio/cotistas, ranking por DY dentro do tipo, fundos irmãos, dividendos recentes, documentos raw desserializados por tipo — tudo do banco
+- Tela (`FundAnalysisPage` no `TickerAnalysis.tsx`): barra de 5 métricas, gráfico, faixa 52s, grids de retorno preço/NAV, cards risco/patrimônio, composição da carteira por tipo (fiagro=allocations, fidc=sectors+cedentes, genérico=summary, fip=capital), perfil de cotistas, tabela de rendimentos, comparação clicável por tipo. Datas dentro de raw docs vêm como ISO completo — `docDate()` corta em 10 chars
+- `profitly.sync.funds-on-startup=true` — **TEMPORÁRIO durante o dev da tela; desligar ao finalizar** (cron das 19h40 mantém os dados)
+
+## Estado (2026-07-06)
+
+- **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC), tela de Tesouro Direto (histórico de taxas, faixa 52s, marcação a mercado, comparação por indexador, nomes oficiais Renda+/Educa+), tela de fundos fiagro/fi-infra/fidc/fip (análise avançada + composição de carteira + rendimentos)
+- **Frente atual:** ajustes finos da tela de fundos (aguardando feedback do Vítor); ao encerrar, desligar `profitly.sync.funds-on-startup`
 - **Backlog:** tela FII no padrão da de ações; carteira integrando tesouro/cripto/fundos; i18n das seções novas; responsividade mobile
