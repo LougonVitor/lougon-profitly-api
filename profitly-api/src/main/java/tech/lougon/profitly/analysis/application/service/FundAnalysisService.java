@@ -94,8 +94,8 @@ public class FundAnalysisService {
             dividendCount12m++;
         }
 
+        // full history, newest first — the wallet screen will map every payout received
         List<FundAnalysisDTO.DividendEvent> recentDividends = dividends.stream()
-                .limit(12)
                 .map(d -> new FundAnalysisDTO.DividendEvent(
                         d.getDeclaredDate(), d.getLastDatePrior(), d.getPaymentDate(),
                         d.getRate(), d.getLabel()))

@@ -553,8 +553,12 @@ public class BrapiAnalysisClient {
         }
     }
 
-    /** Legacy v1 endpoint: /api/quote/{symbol}?dividends=true — single symbol only. */
-    private List<BrapiDividendsResponse.CashDividend> fetchLegacyDividends(String symbol) {
+    /**
+     * Legacy v1 endpoint: /api/quote/{symbol}?dividends=true — single symbol only.
+     * Unlike /v2/funds/dividends (last 12 months only), it carries the FULL payout
+     * history, so the fund sync uses it to deepen first-time backfills.
+     */
+    public List<BrapiDividendsResponse.CashDividend> fetchLegacyDividends(String symbol) {
         try {
             BrapiLegacyDividendsResponse response = webClient.get()
                     .uri(u -> u.path("/api/quote/" + symbol)

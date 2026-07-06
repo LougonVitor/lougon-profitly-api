@@ -338,9 +338,57 @@ public class FundSyncScheduler {
         log.info("Fund dividends sync: {} backfill, {} incremental", backfill.size(), incremental.size());
 
         int saved = 0;
-        saved += syncDividendBatches(backfill, null); // no startDate = full history
+        saved += syncDividendBatches(backfill, null);
         saved += syncDividendBatches(incremental, LocalDate.now().minusMonths(3).toString());
-        log.info("Fund dividends sync complete: {} new events", saved);
+
+        // /v2/funds/dividends only carries the last 12 months regardless of startDate,
+        // so first-load funds get the deep history from the legacy quote endpoint
+        int legacySaved = 0;
+        for (String symbol : backfill) {
+            legacySaved += backfillLegacyDividends(symbol);
+        }
+        log.info("Fund dividends sync complete: {} new events, {} from legacy deep backfill", saved, legacySaved);
+    }
+
+    /**
+     * Extends the history backwards with /api/quote/{symbol}?dividends=true (one call
+     * per fund). The legacy endpoint reports the ANNOUNCEMENT date as paymentDate
+     * (~2 weeks before the v2 payment date), so the same payout never matches the
+     * v2 rows by date — only events strictly before the MONTH of the oldest stored
+     * event are merged, to avoid double counting the overlap window.
+     */
+    private int backfillLegacyDividends(String symbol) {
+        var legacy = brapiClient.fetchLegacyDividends(symbol);
+        if (legacy.isEmpty()) return 0;
+
+        List<FundDividendEventJpaEntity> existing = dividendRepo.findBySymbolOrderByPaymentDateDesc(symbol);
+        String monthCutoff = existing.isEmpty() ? null
+                : existing.get(existing.size() - 1).getPaymentDate().substring(0, 7) + "-01";
+
+        Set<String> existingKeys = existing.stream()
+                .map(d -> d.getPaymentDate() + "|" + d.getRate())
+                .collect(Collectors.toCollection(java.util.HashSet::new));
+
+        Instant now = Instant.now();
+        List<FundDividendEventJpaEntity> toSave = new ArrayList<>();
+        for (var d : legacy) {
+            String paymentDate = normalizeDate(d.paymentDate());
+            if (paymentDate == null || !existingKeys.add(paymentDate + "|" + d.rate())) continue;
+            if (monthCutoff != null && paymentDate.compareTo(monthCutoff) >= 0) continue;
+
+            var entity = new FundDividendEventJpaEntity();
+            entity.setSymbol(symbol);
+            entity.setDeclaredDate(normalizeDate(d.approvedOn()));
+            entity.setLastDatePrior(normalizeDate(d.lastDatePrior()));
+            entity.setPaymentDate(paymentDate);
+            entity.setRate(d.rate());
+            entity.setLabel(d.label());
+            entity.setIsinCode(d.isinCode());
+            entity.setSyncedAt(now);
+            toSave.add(entity);
+        }
+        dividendRepo.saveAll(toSave);
+        return toSave.size();
     }
 
     private int syncDividendBatches(List<String> symbols, String startDate) {
