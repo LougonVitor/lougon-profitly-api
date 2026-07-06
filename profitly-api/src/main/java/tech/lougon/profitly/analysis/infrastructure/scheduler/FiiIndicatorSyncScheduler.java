@@ -335,6 +335,7 @@ public class FiiIndicatorSyncScheduler {
 
     private void syncDocuments(List<String> symbols) {
         int saved = 0;
+        saved += syncDocumentType("/api/v2/fii/reports", "report", symbols);
         saved += syncDocumentType("/api/v2/fii/properties", "properties", symbols);
         saved += syncDocumentType("/api/v2/fii/portfolio", "portfolio", symbols);
         saved += syncDocumentType("/api/v2/fii/properties/history", "properties_history", symbols);

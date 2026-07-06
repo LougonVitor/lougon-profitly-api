@@ -299,6 +299,24 @@ class BrapiDtoParseTest {
     }
 
     @Test
+    void fiiRawList_parsesReportsRootKeyWithAdminFee() throws Exception {
+        // /fii/reports uses "reports" as root key; adminFeeRate is a monthly fraction
+        String json = """
+                {
+                  "reports": [
+                    { "symbol": "HGLG11", "referenceDate": "2026-05-01 00:00:00+00", "adminFeeRate": 0.000444, "navPerShare": 166.0 }
+                  ],
+                  "pagination": { "page": 1, "totalItems": 10, "totalPages": 10, "hasNextPage": true }
+                }
+                """;
+
+        BrapiFiiRawListResponse response = mapper.readValue(json, BrapiFiiRawListResponse.class);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).get("symbol")).isEqualTo("HGLG11");
+        assertThat(response.items().get(0).get("adminFeeRate")).isEqualTo(0.000444);
+    }
+
+    @Test
     void fiiRawList_parsesHistoryRootKey() throws Exception {
         // /fii/properties/history and /fii/portfolio/history use "history" instead of "fiis"
         String json = """

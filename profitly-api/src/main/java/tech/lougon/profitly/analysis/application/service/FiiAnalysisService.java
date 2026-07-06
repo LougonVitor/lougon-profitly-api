@@ -79,14 +79,19 @@ public class FiiAnalysisService {
                                  List<FiiDividendEventJpaEntity> dividends,
                                  List<PricePoint> priceHistory) {
         LocalDate now = LocalDate.now();
+        // trailing dividend sums over 3/6/12 months (dividends are payment-date desc)
+        String cutoff3m = now.minusMonths(3).toString();
+        String cutoff6m = now.minusMonths(6).toString();
         String cutoff12m = now.minusMonths(12).toString();
-        double dividendsSum12m = 0;
+        double dividendsSum3m = 0, dividendsSum6m = 0, dividendsSum12m = 0;
         int dividendCount12m = 0;
         for (FiiDividendEventJpaEntity d : dividends) {
             if (d.getRate() == null || d.getPaymentDate() == null) continue;
             if (d.getPaymentDate().compareTo(cutoff12m) < 0) break; // desc-ordered
             dividendsSum12m += d.getRate();
             dividendCount12m++;
+            if (d.getPaymentDate().compareTo(cutoff6m) >= 0) dividendsSum6m += d.getRate();
+            if (d.getPaymentDate().compareTo(cutoff3m) >= 0) dividendsSum3m += d.getRate();
         }
 
         List<FiiAnalysisDTO.DividendEvent> recentDividends = dividends.stream()
@@ -95,14 +100,30 @@ public class FiiAnalysisService {
                         d.getRate(), d.getLabel()))
                 .toList();
 
-        // magic number: quota price / last monthly payout per quota — quotas needed for one "free" quota a month
-        Double magicNumber = null;
+        // last payout, magic number (price / last monthly payout), 3m/6m yields on the current price
+        Double lastDividend = null, magicNumber = null, dividendYield3m = null, dividendYield6m = null;
         for (FiiDividendEventJpaEntity d : dividends) {
-            if (d.getRate() != null && d.getRate() > 0 && fii.getPrice() != null) {
-                magicNumber = round2(fii.getPrice() / d.getRate());
+            if (d.getRate() != null && d.getRate() > 0) {
+                lastDividend = round4(d.getRate());
+                if (fii.getPrice() != null && fii.getPrice() > 0) magicNumber = round2(fii.getPrice() / d.getRate());
                 break;
             }
         }
+        if (fii.getPrice() != null && fii.getPrice() > 0) {
+            if (dividendsSum3m > 0) dividendYield3m = round2(dividendsSum3m / fii.getPrice() * 100.0);
+            if (dividendsSum6m > 0) dividendYield6m = round2(dividendsSum6m / fii.getPrice() * 100.0);
+        }
+
+        // average DY (12m) across the stored monthly history — approximates Investidor10's "DY médio"
+        double dyAccum = 0;
+        int dyCount = 0;
+        for (FiiIndicatorHistoryJpaEntity h : history) {
+            if (h.getDividendYield12m() != null && h.getDividendYield12m() > 0) {
+                dyAccum += h.getDividendYield12m();
+                dyCount++;
+            }
+        }
+        Double avgDividendYield = dyCount > 0 ? round2(dyAccum / dyCount * 100.0) : null;
 
         // ranking + siblings within the same segment
         Integer dyRank = null, totalInType = null;
@@ -153,6 +174,9 @@ public class FiiAnalysisService {
             }
         }
 
+        // average daily financial volume (R$) over the last ~21 trading days
+        Double avgDailyLiquidity = averageDailyLiquidity(priceHistory);
+
         // NAV-history-driven indicators (fii_indicator_history: navPerShare, equity, investors)
         List<Bar> bars = toBars(history);
         int n = bars.size();
@@ -201,8 +225,16 @@ public class FiiAnalysisService {
         Double vacancyRate = null;
         Map<String, Object> propertiesDoc = loadDocument(fii.getSymbol(), "properties");
         Map<String, Object> portfolioDoc = loadDocument(fii.getSymbol(), "portfolio");
+        Map<String, Object> reportDoc = loadDocument(fii.getSymbol(), "report");
         if (propertiesDoc != null) {
             vacancyRate = pctField(mapField(propertiesDoc, "summary"), "vacancyRate");
+        }
+
+        // management fee: the report carries the monthly rate as a fraction of equity — annualize it
+        Double adminFeeRate = null;
+        if (reportDoc != null) {
+            Double monthlyFee = numField(reportDoc, "adminFeeRate");
+            if (monthlyFee != null && monthlyFee > 0) adminFeeRate = round4(monthlyFee * 12.0 * 100.0);
         }
 
         Map<String, Double> vacancyHistory = new LinkedHashMap<>();
@@ -266,6 +298,9 @@ public class FiiAnalysisService {
                 pct(fii.getDividendYield12m()), pct(fii.getDividendYield1m()),
                 dividendCount12m > 0 ? round4(dividendsSum12m) : null,
                 dividendCount12m > 0 ? dividendCount12m : null,
+                lastDividend,
+                dividendYield3m, dividendYield6m,
+                avgDividendYield, avgDailyLiquidity, adminFeeRate,
                 magicNumber,
                 priceReturns, priceVol1y, priceDrawdown1y,
                 price52wHigh, price52wLow, pricePosition,
@@ -332,6 +367,22 @@ public class FiiAnalysisService {
 
     /** One usable history sample: navPerShare plus optional equity and investor count. */
     private record Bar(LocalDate date, double nav, Double equity, Double investors) {}
+
+    /** Average daily financial volume (R$) over the last ~21 trading days: mean of close × share volume. */
+    private static Double averageDailyLiquidity(List<PricePoint> priceHistory) {
+        double sum = 0;
+        int count = 0;
+        for (int i = priceHistory.size() - 1; i >= 0 && count < 21; i--) {
+            PricePoint p = priceHistory.get(i);
+            if (p.close() == null || p.volume() == null) continue;
+            double close = p.close().doubleValue();
+            if (close <= 0 || p.volume() <= 0) continue;
+            sum += close * p.volume();
+            count++;
+        }
+        if (count == 0) return null;
+        return (double) Math.round(sum / count);
+    }
 
     /** Market price bars reuse the Bar shape with the close price in the nav slot. */
     private static List<Bar> toPriceBars(List<PricePoint> priceHistory) {

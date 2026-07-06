@@ -36,6 +36,18 @@ public record FiiAnalysisDTO(
         Double dividendYield1m,
         Double dividendsSum12m,
         Integer dividendCount12m,
+        /** Most recent payout per quota (R$). */
+        Double lastDividend,
+        /** Sum of dividends over the last 3 months divided by the current price (%). */
+        Double dividendYield3m,
+        /** Sum of dividends over the last 6 months divided by the current price (%). */
+        Double dividendYield6m,
+        /** Average of the monthly DY-12m values across the stored history (%). */
+        Double avgDividendYield,
+        /** Average daily financial volume (R$) over the last ~21 trading days. */
+        Double avgDailyLiquidity,
+        /** Management fee, annualized from the latest monthly report (% a.a.). */
+        Double adminFeeRate,
         /** Price of one quota divided by the last monthly payout per quota — quotas needed for one "free" quota a month. */
         Double magicNumber,
         /** Market price returns (%) keyed by period: 1m, 3m, 6m, 1y, max — from price_points. */
