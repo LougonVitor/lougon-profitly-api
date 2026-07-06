@@ -9,11 +9,14 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import tech.lougon.profitly.analysis.domain.model.PricePoint;
+import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundListResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFundNavHistoryResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiHistoricalResponse;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FundDividendEventJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FundDocumentJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FundIndicatorJpaEntity;
@@ -28,6 +31,7 @@ import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,19 +62,22 @@ public class FundSyncScheduler {
     private final JpaFundDividendEventRepository dividendRepo;
     private final JpaFundDocumentRepository documentRepo;
     private final JpaTickerRepository tickerRepo;
+    private final PriceHistoryRepository priceHistoryRepository;
 
     public FundSyncScheduler(BrapiAnalysisClient brapiClient,
                               JpaFundIndicatorRepository fundRepo,
                               JpaFundNavHistoryRepository navHistoryRepo,
                               JpaFundDividendEventRepository dividendRepo,
                               JpaFundDocumentRepository documentRepo,
-                              JpaTickerRepository tickerRepo) {
+                              JpaTickerRepository tickerRepo,
+                              PriceHistoryRepository priceHistoryRepository) {
         this.brapiClient = brapiClient;
         this.fundRepo = fundRepo;
         this.navHistoryRepo = navHistoryRepo;
         this.dividendRepo = dividendRepo;
         this.documentRepo = documentRepo;
         this.tickerRepo = tickerRepo;
+        this.priceHistoryRepository = priceHistoryRepository;
     }
 
     @Value("${profitly.sync.on-startup:false}")
@@ -113,7 +120,11 @@ public class FundSyncScheduler {
             symbolsByType.put(assetType, symbols);
         }
 
-        List<String> allSymbols = symbolsByType.values().stream().flatMap(List::stream).toList();
+        // /funds/list has no fidc/fip data — those listed tickers are seeded from the
+        // tickers catalog instead (their dividends/documents endpoints do respond by symbol)
+        seedFromTickers(symbolsByType);
+
+        List<String> allSymbols = symbolsByType.values().stream().flatMap(List::stream).distinct().toList();
         if (allSymbols.isEmpty()) {
             log.warn("Fund sync aborted: no fund symbols");
             return;
@@ -125,8 +136,36 @@ public class FundSyncScheduler {
         syncDividends(allSymbols);
         refreshComputedYields(allSymbols);
         syncDocuments(allSymbols, symbolsByType);
+        syncPriceHistories(allSymbols);
         updateTickerDailyChanges(allSymbols);
         log.info("Fund sync complete");
+    }
+
+    /**
+     * Ensures every fund ticker already in the catalog (notably fidc/fip, absent from
+     * /funds/list) has a fund_indicators row so it joins the downstream pipeline.
+     */
+    private void seedFromTickers(Map<String, List<String>> symbolsByType) {
+        List<String> alreadyListed = symbolsByType.values().stream().flatMap(List::stream).toList();
+        int seeded = 0;
+        for (TickerJpaEntity ticker : tickerRepo.findByAssetTypeIgnoreCase("fund")) {
+            String symbol = ticker.getSymbol();
+            String subType = ticker.getSubType() != null ? ticker.getSubType().toLowerCase() : "other";
+            if (symbol == null || alreadyListed.contains(symbol)) continue;
+
+            FundIndicatorJpaEntity entity = fundRepo.findById(symbol)
+                    .orElseGet(() -> { var e = new FundIndicatorJpaEntity(); e.setSymbol(symbol); return e; });
+            if (entity.getName() == null) entity.setName(ticker.getName());
+            if (entity.getLegalName() == null) entity.setLegalName(ticker.getLongName());
+            if (entity.getFundType() == null) entity.setFundType(subType);
+            if (ticker.getLastPrice() != null) entity.setPrice(ticker.getLastPrice().doubleValue());
+            entity.setSyncedAt(Instant.now());
+            fundRepo.save(entity);
+
+            symbolsByType.computeIfAbsent(subType, k -> new ArrayList<>()).add(symbol);
+            seeded++;
+        }
+        if (seeded > 0) log.info("Seeded {} fund tickers absent from /funds/list", seeded);
     }
 
     // ── Catalog ──────────────────────────────────────────────────────────────
@@ -305,12 +344,33 @@ public class FundSyncScheduler {
                         .collect(Collectors.groupingBy(BrapiFundDividendsResponse.FundDividend::symbol));
                 for (var e : bySymbol.entrySet()) {
                     saved += saveDividends(e.getKey(), e.getValue());
+                    enrichFromDividend(e.getKey(), e.getValue().get(0));
                 }
             } catch (Exception e) {
                 log.warn("Failed to sync fund dividends batch [{}...]: {}", batch.get(0), e.getMessage());
             }
         }
         return saved;
+    }
+
+    /**
+     * Dividend rows carry cnpj/assetType even for funds absent from /funds/list
+     * (fidc/fip) — used to fill catalog gaps on the seeded rows.
+     */
+    private void enrichFromDividend(String symbol, BrapiFundDividendsResponse.FundDividend dividend) {
+        if (dividend.cnpj() == null && dividend.assetType() == null) return;
+        fundRepo.findById(symbol).ifPresent(entity -> {
+            boolean changed = false;
+            if (entity.getCnpj() == null && dividend.cnpj() != null) {
+                entity.setCnpj(dividend.cnpj());
+                changed = true;
+            }
+            if (dividend.assetType() != null && !dividend.assetType().equalsIgnoreCase(entity.getFundType())) {
+                entity.setFundType(dividend.assetType().toLowerCase());
+                changed = true;
+            }
+            if (changed) fundRepo.save(entity);
+        });
     }
 
     private int saveDividends(String symbol, List<BrapiFundDividendsResponse.FundDividend> dividends) {
@@ -430,23 +490,89 @@ public class FundSyncScheduler {
         }
     }
 
+    // ── Market price history ─────────────────────────────────────────────────
+
+    /**
+     * Fund tickers trade on B3, so /stocks/historical serves their market price bars.
+     * They go into price_points — the same table the generic
+     * /api/analysis/{symbol}/history chart reads from — with no fund-specific code.
+     */
+    private void syncPriceHistories(List<String> symbols) {
+        int backfilled = 0, incremented = 0, barsSaved = 0;
+        for (String symbol : symbols) {
+            boolean backfill = priceHistoryRepository.findLatestDateBySymbol(symbol).isEmpty();
+            try {
+                List<BrapiHistoricalResponse.PriceBar> bars =
+                        brapiClient.fetchHistory(symbol, backfill ? "max" : "3mo");
+                barsSaved += storePriceBars(symbol, bars);
+                if (backfill) backfilled++; else incremented++;
+            } catch (Exception e) {
+                log.warn("Failed to sync price history for fund {}: {}", symbol, e.getMessage());
+            }
+        }
+        log.info("Fund price history sync complete: {} backfill, {} incremental, {} bars saved",
+                backfilled, incremented, barsSaved);
+    }
+
+    /** Inserts only bars newer than the latest stored date (price_points has a unique symbol+date). */
+    private int storePriceBars(String symbol, List<BrapiHistoricalResponse.PriceBar> bars) {
+        if (bars == null || bars.isEmpty()) return 0;
+
+        LocalDate latest = priceHistoryRepository.findLatestDateBySymbol(symbol).orElse(null);
+        List<PricePoint> points = bars.stream()
+                .filter(b -> b.date() != null && b.close() != null)
+                .map(b -> new PricePoint(
+                        symbol,
+                        Instant.ofEpochSecond(b.date()).atZone(ZoneOffset.UTC).toLocalDate(),
+                        b.open() != null ? BigDecimal.valueOf(b.open()) : null,
+                        b.high() != null ? BigDecimal.valueOf(b.high()) : null,
+                        b.low() != null ? BigDecimal.valueOf(b.low()) : null,
+                        BigDecimal.valueOf(b.close()),
+                        b.adjustedClose() != null ? BigDecimal.valueOf(b.adjustedClose()) : null,
+                        b.volume()
+                ))
+                .filter(p -> latest == null || p.date().isAfter(latest))
+                .toList();
+
+        if (!points.isEmpty()) {
+            priceHistoryRepository.saveAll(points);
+        }
+        return points.size();
+    }
+
     // ── Ticker daily change ──────────────────────────────────────────────────
 
     /**
      * Fund quotes carry no daily change, so the hero variation is derived from the
-     * last two navPerShare history entries (patrimonial daily change).
+     * last two market price bars (NAV daily change as fallback).
      */
     private void updateTickerDailyChanges(List<String> symbols) {
+        LocalDate today = LocalDate.now();
         for (String symbol : symbols) {
-            List<FundNavHistoryJpaEntity> last2 =
-                    navHistoryRepo.findTop2BySymbolOrderByReferenceDateDesc(symbol);
-            if (last2.size() < 2) continue;
-            Double current = last2.get(0).getNavPerShare();
-            Double previous = last2.get(1).getNavPerShare();
+            Double current = null, previous = null;
+
+            List<PricePoint> recent = priceHistoryRepository
+                    .findBySymbolAndDateBetween(symbol, today.minusDays(15), today);
+            if (recent.size() >= 2) {
+                PricePoint last = recent.get(recent.size() - 1);
+                PricePoint prior = recent.get(recent.size() - 2);
+                if (last.close() != null && prior.close() != null) {
+                    current = last.close().doubleValue();
+                    previous = prior.close().doubleValue();
+                }
+            }
+            if (current == null) {
+                List<FundNavHistoryJpaEntity> last2 =
+                        navHistoryRepo.findTop2BySymbolOrderByReferenceDateDesc(symbol);
+                if (last2.size() < 2) continue;
+                current = last2.get(0).getNavPerShare();
+                previous = last2.get(1).getNavPerShare();
+            }
             if (current == null || previous == null || previous <= 0) continue;
 
+            final double change = (current - previous) / previous * 100.0;
             tickerRepo.findBySymbol(symbol).ifPresent(ticker -> {
-                ticker.setChangePercent(BigDecimal.valueOf((current - previous) / previous * 100.0));
+                ticker.setChangePercent(BigDecimal.valueOf(change));
                 tickerRepo.save(ticker);
             });
         }

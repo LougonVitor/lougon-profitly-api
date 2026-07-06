@@ -42,6 +42,16 @@ public record FundAnalysisDTO(
         Double dividendYield1m,
         Double dividendsSum12m,
         Integer dividendCount12m,
+        /** Market price returns (%) keyed by period: 1m, 3m, 6m, 1y, max — from price_points. */
+        Map<String, Double> priceReturns,
+        /** Annualized volatility (%) of daily market price log returns over the last year. */
+        Double priceVolatility1y,
+        /** Worst peak-to-trough market price decline (%) in the last year, negative. */
+        Double priceMaxDrawdown1y,
+        Double price52wHigh,
+        Double price52wLow,
+        /** Where the current price sits inside the 52-week range, 0–100. */
+        Double pricePositionInRange52w,
         /** NAV-per-share returns (%) keyed by period: 1m, 3m, 6m, 1y, max. */
         Map<String, Double> navReturns,
         /** Net equity change (%) keyed by period: 1m, 3m, 6m, 1y, max. */

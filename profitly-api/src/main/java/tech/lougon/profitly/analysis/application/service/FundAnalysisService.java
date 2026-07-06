@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tech.lougon.profitly.analysis.application.dto.FundAnalysisDTO;
+import tech.lougon.profitly.analysis.domain.model.PricePoint;
+import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FundDividendEventJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FundDocumentJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FundIndicatorJpaEntity;
@@ -48,15 +50,18 @@ public class FundAnalysisService {
     private final JpaFundNavHistoryRepository navHistoryRepo;
     private final JpaFundDividendEventRepository dividendRepo;
     private final JpaFundDocumentRepository documentRepo;
+    private final PriceHistoryRepository priceHistoryRepository;
 
     public FundAnalysisService(JpaFundIndicatorRepository fundRepo,
                                JpaFundNavHistoryRepository navHistoryRepo,
                                JpaFundDividendEventRepository dividendRepo,
-                               JpaFundDocumentRepository documentRepo) {
+                               JpaFundDocumentRepository documentRepo,
+                               PriceHistoryRepository priceHistoryRepository) {
         this.fundRepo = fundRepo;
         this.navHistoryRepo = navHistoryRepo;
         this.dividendRepo = dividendRepo;
         this.documentRepo = documentRepo;
+        this.priceHistoryRepository = priceHistoryRepository;
     }
 
     public Optional<FundAnalysisDTO> getAnalysis(String symbol) {
@@ -67,13 +72,16 @@ public class FundAnalysisService {
                 navHistoryRepo.findBySymbolOrderByReferenceDateAsc(fund.getSymbol());
         List<FundDividendEventJpaEntity> dividends =
                 dividendRepo.findBySymbolOrderByPaymentDateDesc(fund.getSymbol());
+        List<PricePoint> priceHistory = priceHistoryRepository
+                .findBySymbolAndDateBetween(fund.getSymbol(), LocalDate.of(2000, 1, 1), LocalDate.now());
 
-        return Optional.of(build(fund, history, dividends));
+        return Optional.of(build(fund, history, dividends, priceHistory));
     }
 
     private FundAnalysisDTO build(FundIndicatorJpaEntity fund,
                                   List<FundNavHistoryJpaEntity> history,
-                                  List<FundDividendEventJpaEntity> dividends) {
+                                  List<FundDividendEventJpaEntity> dividends,
+                                  List<PricePoint> priceHistory) {
         // dividends summary
         LocalDate now = LocalDate.now();
         String cutoff12m = now.minusMonths(12).toString();
@@ -112,6 +120,34 @@ public class FundAnalysisService {
                             f.getSymbol(), f.getName(), f.getFundType(), f.getPrice(), f.getPriceToNav(),
                             f.getDividendYield12m(), f.getDividendYieldMonthly(),
                             f.getEquity(), f.getTotalInvestors())));
+        }
+
+        // market-price-driven indicators (price_points series)
+        Map<String, Double> priceReturns = new LinkedHashMap<>();
+        Double priceVol1y = null, priceDrawdown1y = null;
+        Double price52wHigh = null, price52wLow = null, pricePosition = null;
+        List<Bar> priceBars = toPriceBars(priceHistory);
+        if (!priceBars.isEmpty()) {
+            LocalDate lastPriceDate = priceBars.get(priceBars.size() - 1).date();
+            double currentPrice = fund.getPrice() != null
+                    ? fund.getPrice() : priceBars.get(priceBars.size() - 1).nav();
+
+            putReturn(priceReturns, priceBars, Bar::nav, currentPrice, lastPriceDate);
+            priceVol1y = annualizedVolatility(priceBars, lastPriceDate.minusYears(1));
+            priceDrawdown1y = maxDrawdown(priceBars, lastPriceDate.minusYears(1));
+
+            LocalDate cutoff52 = lastPriceDate.minusWeeks(52);
+            double hi = -Double.MAX_VALUE, lo = Double.MAX_VALUE;
+            for (Bar b : priceBars) {
+                if (b.date().isBefore(cutoff52)) continue;
+                if (b.nav() > hi) hi = b.nav();
+                if (b.nav() < lo) lo = b.nav();
+            }
+            if (hi > -Double.MAX_VALUE) {
+                price52wHigh = hi;
+                price52wLow = lo;
+                if (hi > lo) pricePosition = clamp((currentPrice - lo) / (hi - lo) * 100.0);
+            }
         }
 
         // NAV-history-driven indicators
@@ -170,6 +206,8 @@ public class FundAnalysisService {
                 fund.getDividendYield12m(), fund.getDividendYield1m(),
                 dividendCount12m > 0 ? round4(dividendsSum12m) : null,
                 dividendCount12m > 0 ? dividendCount12m : null,
+                priceReturns, priceVol1y, priceDrawdown1y,
+                price52wHigh, price52wLow, pricePosition,
                 navReturns, equityChanges, investorsChanges,
                 nav52wHigh, nav52wLow, navPosition,
                 navHigh, navHighDate, navLow, navLowDate,
@@ -200,6 +238,18 @@ public class FundAnalysisService {
 
     /** One usable history sample: navPerShare plus optional equity and investor count. */
     private record Bar(LocalDate date, double nav, Double equity, Double investors) {}
+
+    /** Market price bars reuse the Bar shape with the close price in the nav slot. */
+    private static List<Bar> toPriceBars(List<PricePoint> priceHistory) {
+        List<Bar> bars = new ArrayList<>(priceHistory.size());
+        for (PricePoint p : priceHistory) {
+            if (p.date() == null || p.close() == null) continue;
+            double close = p.close().doubleValue();
+            if (close <= 0) continue;
+            bars.add(new Bar(p.date(), close, null, null));
+        }
+        return bars;
+    }
 
     private static List<Bar> toBars(List<FundNavHistoryJpaEntity> history) {
         List<Bar> bars = new ArrayList<>(history.size());
