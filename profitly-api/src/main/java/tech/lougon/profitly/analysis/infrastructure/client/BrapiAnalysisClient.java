@@ -9,6 +9,7 @@ import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiHistorica
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiListResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiRawListResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFinancialDataResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiHistoricalResponse;
@@ -697,6 +698,29 @@ public class BrapiAnalysisClient {
                     .toList();
         } catch (Exception e) {
             log.warn("Failed to fetch FII dividends for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Generic fetch for the FII document endpoints (properties, properties/history,
+     * portfolio, portfolio/history). Rows come back as raw maps — callers store them
+     * whole under the raw JSON pattern. {@code path} examples: "/api/v2/fii/properties",
+     * "/api/v2/fii/portfolio/history".
+     */
+    public List<java.util.Map<String, Object>> fetchFiiDocuments(String path, String symbols) {
+        try {
+            BrapiFiiRawListResponse response = webClient.get()
+                    .uri(u -> u.path(path)
+                            .queryParam("symbols", symbols)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BrapiFiiRawListResponse.class)
+                    .block();
+            if (response == null || response.items() == null) return List.of();
+            return response.items().stream().filter(i -> i != null && i.get("symbol") != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII documents {} for [{}]: {}", path, symbols, e.getMessage());
             return List.of();
         }
     }
