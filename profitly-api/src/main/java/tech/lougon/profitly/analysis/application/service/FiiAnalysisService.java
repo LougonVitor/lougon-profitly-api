@@ -114,10 +114,12 @@ public class FiiAnalysisService {
             if (dividendsSum6m > 0) dividendYield6m = round2(dividendsSum6m / fii.getPrice() * 100.0);
         }
 
-        // average DY (12m) across the stored monthly history — approximates Investidor10's "DY médio"
+        // average DY (12m) over the last 5 years of monthly history — matches Investidor10's "DY médio"
+        String dyCutoff5y = now.minusYears(5).toString();
         double dyAccum = 0;
         int dyCount = 0;
         for (FiiIndicatorHistoryJpaEntity h : history) {
+            if (h.getReferenceDate() == null || h.getReferenceDate().compareTo(dyCutoff5y) < 0) continue;
             if (h.getDividendYield12m() != null && h.getDividendYield12m() > 0) {
                 dyAccum += h.getDividendYield12m();
                 dyCount++;
