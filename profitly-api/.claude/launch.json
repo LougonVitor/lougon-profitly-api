@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "profitly-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/vitor/OneDrive/Documentos/GitHub/lougon-profitly-web/profitly-web", "run", "dev", "--", "--port", "5199", "--strictPort"],
+      "port": 5199
+    },
+    {
+      "name": "profitly-api",
+      "runtimeExecutable": "C:/Users/vitor/OneDrive/Documentos/GitHub/lougon-profitly-api/profitly-api/mvnw.cmd",
+      "runtimeArgs": ["spring-boot:run"],
+      "port": 8080
+    },
+    {
+      "name": "profitly-api-debug",
+      "runtimeExecutable": "C:/Users/vitor/OneDrive/Documentos/GitHub/lougon-profitly-api/profitly-api/mvnw.cmd",
+      "runtimeArgs": ["spring-boot:run", "-Dspring-boot.run.arguments=--server.port=8099 --profitly.sync.fii-on-startup=false"],
+      "port": 8099
+    }
+  ]
+}

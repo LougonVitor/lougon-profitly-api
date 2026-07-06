@@ -188,6 +188,56 @@ class BrapiDtoParseTest {
         assertThat(bar.adjustedClose()).isEqualTo(10.52);
     }
 
+    // ── FII Indicators (flat shape) ────────────────────────────────────────────
+
+    @Test
+    void fiiIndicators_parsesFlatShapeWithRichFields() throws Exception {
+        // Real /api/v2/fii/indicators is FLAT — every field top-level, DY as decimal fraction
+        String json = """
+                {
+                  "fiis": [
+                    {
+                      "symbol": "MXRF11",
+                      "asOfDate": "2026-05-01 00:00:00+00",
+                      "price": 9.76,
+                      "navPerShare": 9.372101,
+                      "priceToNav": 1.0413888,
+                      "dividendYield12m": 0.12243853,
+                      "dividendYield1m": 0.0102459015,
+                      "monthlyReturn": 0.009791,
+                      "totalInvestors": 1468513,
+                      "sharesOutstanding": 460269540,
+                      "equity": 4313692700,
+                      "totalAssets": 4427653600,
+                      "segmentType": "papel",
+                      "name": "FII MAXI RENDA RL",
+                      "cnpj": "97521225000125",
+                      "segmentoAtuacao": "Logística",
+                      "tipoGestao": "Ativa",
+                      "administratorName": "BTG PACTUAL SERVICOS FINANCEIROS S/A DTVM",
+                      "administratorCnpj": "59281253000123",
+                      "administratorPhone1": "55 11 3383-3102"
+                    }
+                  ]
+                }
+                """;
+
+        BrapiFiiIndicatorsResponse response = mapper.readValue(json, BrapiFiiIndicatorsResponse.class);
+
+        assertThat(response.fiis()).hasSize(1);
+        BrapiFiiIndicatorsResponse.FiiIndicator ind = response.fiis().get(0);
+        assertThat(ind.symbol()).isEqualTo("MXRF11");
+        assertThat(ind.equity()).isEqualTo(4313692700.0);
+        assertThat(ind.totalAssets()).isEqualTo(4427653600.0);
+        assertThat(ind.sharesOutstanding()).isEqualTo(460269540L);
+        assertThat(ind.dividendYield12m()).isEqualTo(0.12243853);
+        assertThat(ind.dividendYield1m()).isEqualTo(0.0102459015);
+        assertThat(ind.monthlyReturn()).isEqualTo(0.009791);
+        assertThat(ind.asOfDate()).isEqualTo("2026-05-01 00:00:00+00");
+        assertThat(ind.segmentoAtuacao()).isEqualTo("Logística");
+        assertThat(ind.administratorName()).isEqualTo("BTG PACTUAL SERVICOS FINANCEIROS S/A DTVM");
+    }
+
     // ── FII Properties / Portfolio (raw JSON) ──────────────────────────────────
 
     @Test

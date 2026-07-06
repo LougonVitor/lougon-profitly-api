@@ -184,14 +184,14 @@ public class BrapiAnalysisClient {
         }
     }
 
-    /** Fetches current indicators for a single symbol (used by the API controller). */
-    public Optional<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> fetchFiiIndicators(String symbol) {
-        List<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> list = fetchFiiIndicatorsBatch(symbol);
+    /** Fetches current indicators for a single symbol. */
+    public Optional<BrapiFiiIndicatorsResponse.FiiIndicator> fetchFiiIndicators(String symbol) {
+        List<BrapiFiiIndicatorsResponse.FiiIndicator> list = fetchFiiIndicatorsBatch(symbol);
         return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 
     /** Fetches current indicators for up to 20 comma-separated symbols (used by the scheduler). */
-    public List<BrapiFiiIndicatorsResponse.FiiIndicatorWithInfo> fetchFiiIndicatorsBatch(String symbols) {
+    public List<BrapiFiiIndicatorsResponse.FiiIndicator> fetchFiiIndicatorsBatch(String symbols) {
         try {
             BrapiFiiIndicatorsResponse response = webClient.get()
                     .uri(u -> u.path("/api/v2/fii/indicators")
@@ -232,6 +232,63 @@ public class BrapiAnalysisClient {
                     .toList();
         } catch (Exception e) {
             log.warn("Failed to fetch FII indicator history for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Batch variant: up to 20 comma-separated symbols in one call. Returns every entry
+     * (all symbols mixed) — the caller groups by symbol. brapi caps at 20 symbols.
+     */
+    public List<BrapiFiiIndicatorsHistoryResponse.FiiHistoryEntry> fetchFiiIndicatorsHistoryBatch(
+            String symbols, String startDate) {
+        try {
+            BrapiFiiIndicatorsHistoryResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/fii/indicators/history")
+                                .queryParam("symbols", symbols)
+                                .queryParam("sortOrder", "asc");
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiFiiIndicatorsHistoryResponse.class)
+                    .block();
+
+            if (response == null || response.history() == null) return List.of();
+            return response.history().stream()
+                    .filter(e -> e != null && e.symbol() != null && e.referenceDate() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII indicator history batch [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Batch variant of the dividends fetch: up to 20 comma-separated symbols in one call.
+     * Returns every payout (all symbols mixed) — the caller groups by symbol.
+     */
+    public List<BrapiFiiDividendsResponse.FiiDividend> fetchFiiDividendsBatch(String symbols, String startDate) {
+        try {
+            BrapiFiiDividendsResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/fii/dividends")
+                                .queryParam("symbols", symbols)
+                                .queryParam("sortOrder", "desc");
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiFiiDividendsResponse.class)
+                    .block();
+
+            if (response == null || response.dividends() == null) return List.of();
+            return response.dividends().stream()
+                    .filter(d -> d != null && d.symbol() != null && d.rate() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII dividends batch [{}]: {}", symbols, e.getMessage());
             return List.of();
         }
     }

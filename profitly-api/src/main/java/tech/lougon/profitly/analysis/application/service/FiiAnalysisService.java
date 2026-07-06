@@ -120,7 +120,7 @@ public class FiiAnalysisService {
                     .filter(f -> !fii.getSymbol().equals(f.getSymbol()))
                     .forEach(f -> similar.add(new FiiAnalysisDTO.SimilarFii(
                             f.getSymbol(), f.getName(), f.getSegmentType(), f.getPrice(), f.getPriceToNav(),
-                            f.getDividendYield12m(), f.getDividendYield1m(),
+                            pct(f.getDividendYield12m()), pct(f.getDividendYield1m()),
                             f.getEquity(), f.getTotalInvestors())));
         }
 
@@ -261,8 +261,8 @@ public class FiiAnalysisService {
                 fii.getPrice(), fii.getNavPerShare(), fii.getPriceToNav(),
                 fii.getEquity(), fii.getTotalAssets(), fii.getTotalInvestors(), fii.getSharesOutstanding(),
                 fii.getAsOfDate(), fii.getSyncedAt(),
-                fii.getMonthlyReturn(),
-                fii.getDividendYield12m(), fii.getDividendYield1m(),
+                pct(fii.getMonthlyReturn()),
+                pct(fii.getDividendYield12m()), pct(fii.getDividendYield1m()),
                 dividendCount12m > 0 ? round4(dividendsSum12m) : null,
                 dividendCount12m > 0 ? dividendCount12m : null,
                 magicNumber,
@@ -317,6 +317,11 @@ public class FiiAnalysisService {
     private static Double pctField(Map<String, Object> obj, String key) {
         Double v = numField(obj, key);
         return v != null ? round2(v * 100.0) : null;
+    }
+
+    /** Brapi dividend-yield / monthly-return come as decimal fractions (0.12 = 12%) — scaled to percent. */
+    private static Double pct(Double fraction) {
+        return fraction != null ? round2(fraction * 100.0) : null;
     }
 
     /** One usable history sample: navPerShare plus optional equity and investor count. */

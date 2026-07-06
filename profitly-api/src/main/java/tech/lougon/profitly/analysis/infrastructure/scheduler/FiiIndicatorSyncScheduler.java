@@ -15,6 +15,7 @@ import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiHistoricalResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiListResponse;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FiiDividendEventJpaEntity;
 import tech.lougon.profitly.analysis.infrastructure.persistence.FiiDocumentJpaEntity;
@@ -32,23 +33,28 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Full sync pipeline for listed FIIs from the /api/v2/fii/* endpoints: catalog +
- * indicators + monthly indicator history + dividend events + market price history
- * + raw property/portfolio documents (vacancy, allocations).
+ * monthly indicators + monthly indicator history + dividend events + market price
+ * history + raw property/portfolio documents (vacancy, allocations).
+ *
+ * Every brapi endpoint here accepts up to 20 symbols per call, so all phases batch
+ * symbols in groups of 20 — one call per group, not one per FII.
  */
 @Component
 public class FiiIndicatorSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(FiiIndicatorSyncScheduler.class);
 
-    /** brapi caps the FII document endpoints at 20 symbols per call. */
+    /** brapi caps the FII endpoints at 20 symbols per call. */
     private static final int BATCH_SIZE = 20;
+    private static final String HISTORY_BACKFILL_START = "2016-01-01";
+    private static final String DIVIDEND_BACKFILL_START = "2016-01-01";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -114,13 +120,15 @@ public class FiiIndicatorSyncScheduler {
                 log.warn("Failed to save FII indicator for {}: {}", item.symbol(), e.getMessage());
             }
         }
-        log.info("FII sync complete: {}/{} tickers synced", synced.size(), allFiis.size());
+        log.info("FII catalog synced: {}/{} tickers", synced.size(), allFiis.size());
 
+        syncIndicators(synced);
         syncIndicatorHistories(synced);
         syncDividends(synced);
         syncDocuments(synced);
         syncPriceHistories(synced);
         updateTickerDailyChanges(synced);
+        log.info("FII sync complete");
     }
 
     private void upsertTicker(BrapiFiiListResponse.FiiListItem item) {
@@ -164,57 +172,102 @@ public class FiiIndicatorSyncScheduler {
         indicatorRepo.save(entity);
     }
 
+    // ── Monthly indicators (enrich equity, totalAssets, DY 1m, asOfDate, ...) ──
+
+    /**
+     * /fii/list omits equity, totalAssets, sharesOutstanding, dividendYield1m,
+     * monthlyReturn and asOfDate — those only come from /fii/indicators. Fetched in
+     * batches of 20 and merged onto the catalog rows.
+     */
+    private void syncIndicators(List<String> symbols) {
+        int updated = 0;
+        for (List<String> batch : batches(symbols)) {
+            List<BrapiFiiIndicatorsResponse.FiiIndicator> results =
+                    brapiClient.fetchFiiIndicatorsBatch(String.join(",", batch));
+            for (var ind : results) {
+                FiiIndicatorJpaEntity entity = indicatorRepo.findById(ind.symbol()).orElse(null);
+                if (entity == null) continue;
+                entity.setAsOfDate(normalizeDate(ind.asOfDate()));
+                if (ind.price() != null) entity.setPrice(ind.price());
+                if (ind.navPerShare() != null) entity.setNavPerShare(ind.navPerShare());
+                if (ind.priceToNav() != null) entity.setPriceToNav(ind.priceToNav());
+                if (ind.dividendYield12m() != null) entity.setDividendYield12m(ind.dividendYield12m());
+                if (ind.dividendYield1m() != null) entity.setDividendYield1m(ind.dividendYield1m());
+                if (ind.monthlyReturn() != null) entity.setMonthlyReturn(ind.monthlyReturn());
+                if (ind.equity() != null) entity.setEquity(ind.equity());
+                if (ind.totalAssets() != null) entity.setTotalAssets(ind.totalAssets());
+                if (ind.sharesOutstanding() != null) entity.setSharesOutstanding(ind.sharesOutstanding());
+                if (ind.totalInvestors() != null) entity.setTotalInvestors(ind.totalInvestors());
+                if (ind.segmentType() != null) entity.setSegmentType(ind.segmentType());
+                if (ind.segmentoAtuacao() != null) entity.setSegmentoAtuacao(ind.segmentoAtuacao());
+                if (ind.tipoGestao() != null) entity.setTipoGestao(ind.tipoGestao());
+                if (ind.administratorName() != null) entity.setAdminName(ind.administratorName());
+                if (ind.administratorCnpj() != null) entity.setAdminCnpj(ind.administratorCnpj());
+                entity.setSyncedAt(Instant.now());
+                indicatorRepo.save(entity);
+                updated++;
+            }
+        }
+        log.info("FII indicators enriched: {}/{}", updated, symbols.size());
+    }
+
     // ── Monthly indicator history (P/VP, DY, equity, investors over time) ────
 
     private void syncIndicatorHistories(List<String> symbols) {
-        int saved = 0;
+        List<String> backfill = new ArrayList<>();
+        List<String> incremental = new ArrayList<>();
         for (String symbol : symbols) {
-            try {
-                saved += syncIndicatorHistory(symbol);
-            } catch (Exception e) {
-                log.warn("Failed to sync FII indicator history for {}: {}", symbol, e.getMessage());
-            }
+            if (historyRepo.countBySymbol(symbol) == 0) backfill.add(symbol);
+            else incremental.add(symbol);
         }
-        log.info("FII indicator history sync complete: {} new entries", saved);
+        int saved = 0;
+        saved += syncHistoryBatches(backfill, HISTORY_BACKFILL_START);
+        saved += syncHistoryBatches(incremental, LocalDate.now().minusMonths(3).toString());
+        log.info("FII indicator history sync complete: {} backfill, {} incremental, {} new entries",
+                backfill.size(), incremental.size(), saved);
     }
 
-    private int syncIndicatorHistory(String symbol) {
-        boolean firstSync = historyRepo.countBySymbol(symbol) == 0;
-        String startDate = firstSync ? "2016-01-01" : LocalDate.now().minusMonths(3).toString();
-
-        List<BrapiFiiIndicatorsHistoryResponse.FiiHistoryEntry> entries =
-                brapiClient.fetchFiiIndicatorsHistory(symbol, startDate, null);
-        if (entries.isEmpty()) return 0;
-
-        Set<String> existingDates = historyRepo.findBySymbolOrderByReferenceDateAsc(symbol)
-                .stream().map(FiiIndicatorHistoryJpaEntity::getReferenceDate)
-                .collect(Collectors.toSet());
-
+    private int syncHistoryBatches(List<String> symbols, String startDate) {
         int saved = 0;
-        Instant now = Instant.now();
-        for (var e : entries) {
-            if (e.referenceDate() == null) continue;
-            String refDate = normalizeDate(e.referenceDate());
-            if (existingDates.contains(refDate)) continue;
+        for (List<String> batch : batches(symbols)) {
+            try {
+                List<BrapiFiiIndicatorsHistoryResponse.FiiHistoryEntry> entries =
+                        brapiClient.fetchFiiIndicatorsHistoryBatch(String.join(",", batch), startDate);
+                // existing (symbol, refDate) keys for this batch, to insert only new rows
+                Set<String> existing = new HashSet<>();
+                for (String symbol : batch) {
+                    for (FiiIndicatorHistoryJpaEntity h : historyRepo.findBySymbolOrderByReferenceDateAsc(symbol)) {
+                        existing.add(h.getSymbol() + "|" + h.getReferenceDate());
+                    }
+                }
+                Instant now = Instant.now();
+                for (var e : entries) {
+                    String refDate = normalizeDate(e.referenceDate());
+                    String key = e.symbol() + "|" + refDate;
+                    if (existing.contains(key)) continue;
 
-            var entity = new FiiIndicatorHistoryJpaEntity();
-            entity.setSymbol(symbol);
-            entity.setReferenceDate(refDate);
-            entity.setPrice(e.price());
-            entity.setNavPerShare(e.navPerShare());
-            entity.setPriceToNav(e.priceToNav());
-            entity.setDividendYield12m(e.dividendYield12m());
-            entity.setDividendYield1m(e.dividendYield1m());
-            entity.setMonthlyReturn(e.monthlyReturn());
-            entity.setTotalInvestors(e.totalInvestors());
-            entity.setSharesOutstanding(e.sharesOutstanding());
-            entity.setEquity(e.equity());
-            entity.setTotalAssets(e.totalAssets());
-            entity.setSegmentType(e.segmentType());
-            entity.setSyncedAt(now);
-            historyRepo.save(entity);
-            existingDates.add(refDate);
-            saved++;
+                    var entity = new FiiIndicatorHistoryJpaEntity();
+                    entity.setSymbol(e.symbol());
+                    entity.setReferenceDate(refDate);
+                    entity.setPrice(e.price());
+                    entity.setNavPerShare(e.navPerShare());
+                    entity.setPriceToNav(e.priceToNav());
+                    entity.setDividendYield12m(e.dividendYield12m());
+                    entity.setDividendYield1m(e.dividendYield1m());
+                    entity.setMonthlyReturn(e.monthlyReturn());
+                    entity.setTotalInvestors(e.totalInvestors());
+                    entity.setSharesOutstanding(e.sharesOutstanding());
+                    entity.setEquity(e.equity());
+                    entity.setTotalAssets(e.totalAssets());
+                    entity.setSegmentType(e.segmentType());
+                    entity.setSyncedAt(now);
+                    historyRepo.save(entity);
+                    existing.add(key);
+                    saved++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to sync FII history batch [{}...]: {}", batch.get(0), e.getMessage());
+            }
         }
         return saved;
     }
@@ -222,42 +275,60 @@ public class FiiIndicatorSyncScheduler {
     // ── Dividends ─────────────────────────────────────────────────────────────
 
     private void syncDividends(List<String> symbols) {
-        int saved = 0;
+        List<String> backfill = new ArrayList<>();
+        List<String> incremental = new ArrayList<>();
         for (String symbol : symbols) {
-            try {
-                saved += syncDividendsFor(symbol);
-            } catch (Exception e) {
-                log.warn("Failed to sync FII dividends for {}: {}", symbol, e.getMessage());
-            }
+            if (dividendRepo.countBySymbol(symbol) == 0) backfill.add(symbol);
+            else incremental.add(symbol);
         }
-        log.info("FII dividends sync complete: {} events saved", saved);
+        int saved = 0;
+        saved += syncDividendBatches(backfill, DIVIDEND_BACKFILL_START);
+        saved += syncDividendBatches(incremental, LocalDate.now().minusMonths(3).toString());
+        log.info("FII dividends sync complete: {} backfill, {} incremental, {} new events",
+                backfill.size(), incremental.size(), saved);
     }
 
-    private int syncDividendsFor(String symbol) {
-        List<BrapiFiiDividendsResponse.FiiDividend> dividends = brapiClient.fetchFiiDividends(symbol);
-        if (dividends.isEmpty()) return 0;
-
-        // deleteAll(entities) works without @Modifying transaction — avoids self-invocation proxy issue
-        dividendRepo.deleteAll(dividendRepo.findBySymbolOrderByPaymentDateDesc(symbol));
-
+    private int syncDividendBatches(List<String> symbols, String startDate) {
         int saved = 0;
-        Instant now = Instant.now();
-        for (var d : dividends) {
-            if (d.rate() == null) continue;
-            var entity = new FiiDividendEventJpaEntity();
-            entity.setSymbol(symbol);
-            entity.setLabel(d.label());
-            entity.setRate(d.rate());
-            entity.setPaymentDate(d.paymentDate());
-            entity.setLastDatePrior(d.lastDatePrior());
-            entity.setApprovedOn(d.approvedOn());
-            entity.setRelatedTo(d.relatedTo());
-            entity.setIsinCode(d.isinCode());
-            entity.setSyncedAt(now);
-            dividendRepo.save(entity);
-            saved++;
+        for (List<String> batch : batches(symbols)) {
+            try {
+                List<BrapiFiiDividendsResponse.FiiDividend> dividends =
+                        brapiClient.fetchFiiDividendsBatch(String.join(",", batch), startDate);
+                // existing (symbol, paymentDate, rate) keys, to insert only new events
+                Set<String> existing = new HashSet<>();
+                for (String symbol : batch) {
+                    for (FiiDividendEventJpaEntity d : dividendRepo.findBySymbolOrderByPaymentDateDesc(symbol)) {
+                        existing.add(dividendKey(d.getSymbol(), d.getPaymentDate(), d.getRate()));
+                    }
+                }
+                Instant now = Instant.now();
+                for (var d : dividends) {
+                    String key = dividendKey(d.symbol(), d.paymentDate(), d.rate());
+                    if (existing.contains(key)) continue;
+
+                    var entity = new FiiDividendEventJpaEntity();
+                    entity.setSymbol(d.symbol());
+                    entity.setLabel(d.label());
+                    entity.setRate(d.rate());
+                    entity.setPaymentDate(d.paymentDate());
+                    entity.setLastDatePrior(d.lastDatePrior());
+                    entity.setApprovedOn(d.approvedOn());
+                    entity.setRelatedTo(d.relatedTo());
+                    entity.setIsinCode(d.isinCode());
+                    entity.setSyncedAt(now);
+                    dividendRepo.save(entity);
+                    existing.add(key);
+                    saved++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to sync FII dividends batch [{}...]: {}", batch.get(0), e.getMessage());
+            }
         }
         return saved;
+    }
+
+    private static String dividendKey(String symbol, String paymentDate, Double rate) {
+        return symbol + "|" + paymentDate + "|" + rate;
     }
 
     // ── Raw documents (properties / portfolio, current + quarterly history) ──
@@ -408,6 +479,7 @@ public class FiiIndicatorSyncScheduler {
 
     /** brapi FII dates come as ISO timestamps or plain dates — keep only the date. */
     private static String normalizeDate(String value) {
+        if (value == null) return null;
         return value.length() > 10 ? value.substring(0, 10) : value;
     }
 }
