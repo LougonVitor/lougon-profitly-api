@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.*;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -185,6 +186,82 @@ class BrapiDtoParseTest {
         assertThat(bar.close()).isEqualTo(10.52);
         assertThat(bar.volume()).isEqualTo(3_500_000L);
         assertThat(bar.adjustedClose()).isEqualTo(10.52);
+    }
+
+    // ── FII Properties / Portfolio (raw JSON) ──────────────────────────────────
+
+    @Test
+    void fiiRawList_parsesPropertiesWithNestedSummaryAndList() throws Exception {
+        String json = """
+                {
+                  "fiis": [
+                    {
+                      "symbol": "HGLG11",
+                      "cnpj": "11728688000147",
+                      "referenceDate": "2026-03-31",
+                      "summary": { "count": 37, "totalArea": 2066028.32, "vacancyRate": 0.032785 },
+                      "properties": [
+                        { "name": "São José dos Campos", "area": 72487.36, "vacancyRate": 0.248282735086503, "revenueShare": 0.0241721159147739 }
+                      ]
+                    }
+                  ]
+                }
+                """;
+
+        BrapiFiiRawListResponse response = mapper.readValue(json, BrapiFiiRawListResponse.class);
+
+        assertThat(response.items()).hasSize(1);
+        Map<String, Object> item = response.items().get(0);
+        assertThat(item.get("symbol")).isEqualTo("HGLG11");
+        assertThat(item.get("summary")).isInstanceOf(Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> summary = (Map<String, Object>) item.get("summary");
+        assertThat(summary.get("vacancyRate")).isEqualTo(0.032785);
+        assertThat(item.get("properties")).isInstanceOf(List.class);
+    }
+
+    @Test
+    void fiiRawList_parsesPortfolioAllocations() throws Exception {
+        String json = """
+                {
+                  "fiis": [
+                    {
+                      "symbol": "MXRF11",
+                      "referenceDate": "2026-03-31",
+                      "allocations": [
+                        { "assetClass": "cri", "count": 3, "value": 3349501.49 },
+                        { "assetClass": "real_estate", "count": 37, "value": null }
+                      ]
+                    }
+                  ]
+                }
+                """;
+
+        BrapiFiiRawListResponse response = mapper.readValue(json, BrapiFiiRawListResponse.class);
+        Map<String, Object> item = response.items().get(0);
+
+        assertThat(item.get("symbol")).isEqualTo("MXRF11");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> allocations = (List<Map<String, Object>>) item.get("allocations");
+        assertThat(allocations).hasSize(2);
+        assertThat(allocations.get(0).get("assetClass")).isEqualTo("cri");
+        assertThat(allocations.get(0).get("value")).isEqualTo(3349501.49);
+    }
+
+    @Test
+    void fiiRawList_parsesHistoryRootKey() throws Exception {
+        // /fii/properties/history and /fii/portfolio/history use "history" instead of "fiis"
+        String json = """
+                {
+                  "history": [
+                    { "symbol": "HGLG11", "referenceDate": "2025-12-31", "summary": { "vacancyRate": 0.029088 } }
+                  ]
+                }
+                """;
+
+        BrapiFiiRawListResponse response = mapper.readValue(json, BrapiFiiRawListResponse.class);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).get("symbol")).isEqualTo("HGLG11");
     }
 
     // ── Treasury List ─────────────────────────────────────────────────────────
