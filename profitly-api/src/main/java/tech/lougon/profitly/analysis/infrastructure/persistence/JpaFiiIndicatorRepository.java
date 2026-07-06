@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface JpaFiiIndicatorRepository extends JpaRepository<FiiIndicatorJpaEntity, String> {
     List<FiiIndicatorJpaEntity> findAllByOrderByDividendYield12mDesc();
+    List<FiiIndicatorJpaEntity> findBySegmentTypeIgnoreCase(String segmentType);
 }
