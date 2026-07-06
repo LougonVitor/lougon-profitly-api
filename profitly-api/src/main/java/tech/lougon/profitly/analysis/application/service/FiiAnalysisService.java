@@ -91,7 +91,8 @@ public class FiiAnalysisService {
 
         List<FiiAnalysisDTO.DividendEvent> recentDividends = dividends.stream()
                 .map(d -> new FiiAnalysisDTO.DividendEvent(
-                        d.getApprovedOn(), d.getLastDatePrior(), d.getPaymentDate(), d.getRate(), d.getLabel()))
+                        date10(d.getApprovedOn()), date10(d.getLastDatePrior()), date10(d.getPaymentDate()),
+                        d.getRate(), d.getLabel()))
                 .toList();
 
         // magic number: quota price / last monthly payout per quota — quotas needed for one "free" quota a month
@@ -322,6 +323,11 @@ public class FiiAnalysisService {
     /** Brapi dividend-yield / monthly-return come as decimal fractions (0.12 = 12%) — scaled to percent. */
     private static Double pct(Double fraction) {
         return fraction != null ? round2(fraction * 100.0) : null;
+    }
+
+    /** FII dividend dates arrive as "2026-05-29 00:00:00+00" — keep only the yyyy-MM-dd part. */
+    private static String date10(String value) {
+        return value != null && value.length() >= 10 ? value.substring(0, 10) : value;
     }
 
     /** One usable history sample: navPerShare plus optional equity and investor count. */
