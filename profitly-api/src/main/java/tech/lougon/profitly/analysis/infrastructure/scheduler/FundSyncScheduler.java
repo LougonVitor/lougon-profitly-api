@@ -141,17 +141,26 @@ public class FundSyncScheduler {
         log.info("Fund sync complete");
     }
 
+    /** Ticker sub_type spelling variants mapped to brapi's canonical assetType values. */
+    private static final Map<String, String> SEED_SUB_TYPES = Map.of(
+            "fiagro", "fiagro", "fi-agro", "fiagro",
+            "fiinfra", "fiinfra", "fi-infra", "fiinfra",
+            "fidc", "fidc", "fip", "fip");
+
     /**
-     * Ensures every fund ticker already in the catalog (notably fidc/fip, absent from
-     * /funds/list) has a fund_indicators row so it joins the downstream pipeline.
+     * Ensures every LISTED fund ticker of the screen's types (fiagro, fi-infra, fidc,
+     * fip — notably fidc/fip, absent from /funds/list) has a fund_indicators row so it
+     * joins the downstream pipeline. ETFs, FIIs and unclassified funds stay out —
+     * they have their own screens.
      */
     private void seedFromTickers(Map<String, List<String>> symbolsByType) {
         List<String> alreadyListed = symbolsByType.values().stream().flatMap(List::stream).toList();
         int seeded = 0;
         for (TickerJpaEntity ticker : tickerRepo.findByAssetTypeIgnoreCase("fund")) {
             String symbol = ticker.getSymbol();
-            String subType = ticker.getSubType() != null ? ticker.getSubType().toLowerCase() : "other";
-            if (symbol == null || alreadyListed.contains(symbol)) continue;
+            String subType = ticker.getSubType() != null
+                    ? SEED_SUB_TYPES.get(ticker.getSubType().toLowerCase()) : null;
+            if (symbol == null || subType == null || alreadyListed.contains(symbol)) continue;
 
             FundIndicatorJpaEntity entity = fundRepo.findById(symbol)
                     .orElseGet(() -> { var e = new FundIndicatorJpaEntity(); e.setSymbol(symbol); return e; });
