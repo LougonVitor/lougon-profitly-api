@@ -55,6 +55,7 @@ public class FiiIndicatorSyncScheduler {
     private static final int BATCH_SIZE = 20;
     private static final String HISTORY_BACKFILL_START = "2016-01-01";
     private static final String DIVIDEND_BACKFILL_START = "2016-01-01";
+    private static final String PRICE_BACKFILL_START = "2015-01-01";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -335,12 +336,33 @@ public class FiiIndicatorSyncScheduler {
 
     private void syncDocuments(List<String> symbols) {
         int saved = 0;
-        saved += syncDocumentType("/api/v2/fii/reports", "report", symbols);
+        saved += syncReports(symbols);
         saved += syncDocumentType("/api/v2/fii/properties", "properties", symbols);
         saved += syncDocumentType("/api/v2/fii/portfolio", "portfolio", symbols);
         saved += syncDocumentType("/api/v2/fii/properties/history", "properties_history", symbols);
         saved += syncDocumentType("/api/v2/fii/portfolio/history", "portfolio_history", symbols);
         log.info("FII documents sync complete: {} new/updated documents", saved);
+    }
+
+    /**
+     * Stores the last ~13 monthly reports per FII (one "report" doc per month) so the
+     * analysis can average the noisy monthly management fee instead of trusting a single
+     * month that may carry a one-off performance fee.
+     */
+    private int syncReports(List<String> symbols) {
+        String startDate = LocalDate.now().minusMonths(13).toString();
+        int saved = 0;
+        for (List<String> batch : batches(symbols)) {
+            try {
+                List<Map<String, Object>> items = brapiClient.fetchFiiReports(String.join(",", batch), startDate);
+                for (Map<String, Object> item : items) {
+                    if (saveDocument("report", item)) saved++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to sync FII reports batch [{}...]: {}", batch.get(0), e.getMessage());
+            }
+        }
+        return saved;
     }
 
     private int syncDocumentType(String path, String docType, List<String> symbols) {
@@ -389,24 +411,38 @@ public class FiiIndicatorSyncScheduler {
     /**
      * FII market price bars come from the FII-specific /fii/historical endpoint
      * (distinct response shape from the generic /stocks/historical used by funds).
-     * They go into price_points — the same table the generic
-     * /api/analysis/{symbol}/history chart reads from — with no FII-specific code.
+     * That endpoint is bounded by startDate (NOT a range param), so backfill passes an
+     * early date. Batched by 20 symbols per call. Bars go into price_points — the same
+     * table the generic /api/analysis/{symbol}/history chart reads from.
      */
     private void syncPriceHistories(List<String> symbols) {
-        int backfilled = 0, incremented = 0, barsSaved = 0;
+        List<String> backfill = new ArrayList<>();
+        List<String> incremental = new ArrayList<>();
         for (String symbol : symbols) {
-            boolean backfill = priceHistoryRepository.findLatestDateBySymbol(symbol).isEmpty();
+            if (priceHistoryRepository.findLatestDateBySymbol(symbol).isEmpty()) backfill.add(symbol);
+            else incremental.add(symbol);
+        }
+        int barsSaved = 0;
+        barsSaved += syncPriceBatches(backfill, PRICE_BACKFILL_START);
+        barsSaved += syncPriceBatches(incremental, LocalDate.now().minusMonths(3).toString());
+        log.info("FII price history sync complete: {} backfill, {} incremental, {} bars saved",
+                backfill.size(), incremental.size(), barsSaved);
+    }
+
+    private int syncPriceBatches(List<String> symbols, String startDate) {
+        int barsSaved = 0;
+        for (List<String> batch : batches(symbols)) {
             try {
-                List<BrapiFiiHistoricalResponse.PriceBar> bars =
-                        brapiClient.fetchFiiHistory(symbol, backfill ? "max" : "3mo");
-                barsSaved += storePriceBars(symbol, bars);
-                if (backfill) backfilled++; else incremented++;
+                List<BrapiFiiHistoricalResponse.FiiHistoricalResult> results =
+                        brapiClient.fetchFiiHistoryBatch(String.join(",", batch), startDate);
+                for (var r : results) {
+                    barsSaved += storePriceBars(r.symbol(), r.historicalDataPrice());
+                }
             } catch (Exception e) {
-                log.warn("Failed to sync price history for FII {}: {}", symbol, e.getMessage());
+                log.warn("Failed to sync FII price batch [{}...]: {}", batch.get(0), e.getMessage());
             }
         }
-        log.info("FII price history sync complete: {} backfill, {} incremental, {} bars saved",
-                backfilled, incremented, barsSaved);
+        return barsSaved;
     }
 
     /** Inserts only bars newer than the latest stored date (price_points has a unique symbol+date). */

@@ -121,18 +121,24 @@ public class FiiAnalysisService {
             if (dividendsSum6m > 0) dividendYield6m = round2(dividendsSum6m / fii.getPrice() * 100.0);
         }
 
-        // average DY (12m) over the last 5 years of monthly history — matches Investidor10's "DY médio"
-        String dyCutoff5y = now.minusYears(5).toString();
-        double dyAccum = 0;
-        int dyCount = 0;
-        for (FiiIndicatorHistoryJpaEntity h : history) {
-            if (h.getReferenceDate() == null || h.getReferenceDate().compareTo(dyCutoff5y) < 0) continue;
-            if (h.getDividendYield12m() != null && h.getDividendYield12m() > 0) {
-                dyAccum += h.getDividendYield12m();
-                dyCount++;
-            }
+        // DY médio: average of each year's year-end DY-12m over the last 5 years — one point
+        // per year (how "DY médio N anos" is usually quoted), not a per-month average
+        LinkedHashMap<Integer, Double> yearEndDy = new LinkedHashMap<>();
+        for (FiiIndicatorHistoryJpaEntity h : history) { // ascending → the last write per year is its year-end
+            if (h.getReferenceDate() == null || h.getReferenceDate().length() < 4) continue;
+            if (h.getDividendYield12m() == null || h.getDividendYield12m() <= 0) continue;
+            try {
+                yearEndDy.put(Integer.parseInt(h.getReferenceDate().substring(0, 4)), h.getDividendYield12m());
+            } catch (NumberFormatException ignored) { /* skip malformed year */ }
         }
-        Double avgDividendYield = dyCount > 0 ? round2(dyAccum / dyCount * 100.0) : null;
+        Double avgDividendYield = null;
+        if (!yearEndDy.isEmpty()) {
+            List<Double> vals = new ArrayList<>(yearEndDy.values());
+            List<Double> last5 = vals.subList(Math.max(0, vals.size() - 5), vals.size());
+            double s = 0;
+            for (double v : last5) s += v;
+            avgDividendYield = round2(s / last5.size() * 100.0);
+        }
 
         // ranking + siblings within the same segment
         Integer dyRank = null, totalInType = null;
@@ -233,14 +239,10 @@ public class FiiAnalysisService {
 
         Map<String, Object> propertiesDoc = loadDocument(fii.getSymbol(), "properties");
         Map<String, Object> portfolioDoc = loadDocument(fii.getSymbol(), "portfolio");
-        Map<String, Object> reportDoc = loadDocument(fii.getSymbol(), "report");
 
-        // management fee: the report carries the monthly rate as a fraction of equity — annualize it
-        Double adminFeeRate = null;
-        if (reportDoc != null) {
-            Double monthlyFee = numField(reportDoc, "adminFeeRate");
-            if (monthlyFee != null && monthlyFee > 0) adminFeeRate = round4(monthlyFee * 12.0 * 100.0);
-        }
+        // management fee: the monthly report rate is noisy (occasional performance fees),
+        // so take the median of the last 12 months and annualize it.
+        Double adminFeeRate = medianAdminFee(fii.getSymbol());
 
         // Vacancy: skip bad brapi filings (implausibly high) and take the most recent sane
         // quarter for both the headline value and the trend.
@@ -336,6 +338,26 @@ public class FiiAnalysisService {
                 vacancyRate, vacancyHistory, properties, allocations,
                 documents
         );
+    }
+
+    /** Median of the last 12 monthly management-fee rates, annualized (% a.a.) — null if no reports. */
+    private Double medianAdminFee(String symbol) {
+        List<Double> fees = new ArrayList<>();
+        for (FiiDocumentJpaEntity doc : documentRepo.findBySymbolAndDocTypeOrderByReferenceDateAsc(symbol, "report")) {
+            try {
+                Map<String, Object> parsed = JSON.readValue(doc.getRawJson(), new TypeReference<Map<String, Object>>() {});
+                Double fee = numField(parsed, "adminFeeRate");
+                if (fee != null && fee > 0) fees.add(fee);
+            } catch (Exception e) {
+                log.warn("Failed to parse FII report document {}/{}: {}", symbol, doc.getReferenceDate(), e.getMessage());
+            }
+        }
+        if (fees.isEmpty()) return null;
+        List<Double> recent = new ArrayList<>(fees.subList(Math.max(0, fees.size() - 12), fees.size()));
+        recent.sort(Comparator.naturalOrder());
+        int n = recent.size();
+        double median = n % 2 == 1 ? recent.get(n / 2) : (recent.get(n / 2 - 1) + recent.get(n / 2)) / 2.0;
+        return round4(median * 12.0 * 100.0);
     }
 
     private Map<String, Object> loadDocument(String symbol, String docType) {

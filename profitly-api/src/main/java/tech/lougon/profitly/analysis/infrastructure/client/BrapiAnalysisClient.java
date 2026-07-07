@@ -85,6 +85,35 @@ public class BrapiAnalysisClient {
         }
     }
 
+    /**
+     * Batched FII daily OHLCV history: up to 20 comma-separated symbols in one call.
+     * /fii/historical is bounded by startDate/endDate (NOT a range param), so backfill
+     * passes an early startDate. Returns one result per symbol — the caller groups them.
+     */
+    public List<BrapiFiiHistoricalResponse.FiiHistoricalResult> fetchFiiHistoryBatch(String symbols, String startDate) {
+        try {
+            BrapiFiiHistoricalResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/fii/historical")
+                                .queryParam("symbols", symbols)
+                                .queryParam("sortOrder", "asc");
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiFiiHistoricalResponse.class)
+                    .block();
+
+            if (response == null || response.fiis() == null) return List.of();
+            return response.fiis().stream()
+                    .filter(r -> r != null && r.symbol() != null && r.historicalDataPrice() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII history batch [{}]: {}", symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
     /** Fetches FII daily OHLCV history from /api/v2/fii/historical. */
     public List<BrapiFiiHistoricalResponse.PriceBar> fetchFiiHistory(String symbol, String range) {
         try {
@@ -778,6 +807,33 @@ public class BrapiAnalysisClient {
             return response.items().stream().filter(i -> i != null && i.get("symbol") != null).toList();
         } catch (Exception e) {
             log.warn("Failed to fetch FII documents {} for [{}]: {}", path, symbols, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Fetches multiple months of /fii/reports for up to 20 symbols since {@code startDate}
+     * (limit high enough to return every month for the batch). Used to average the monthly
+     * management fee, which is noisy month-to-month.
+     */
+    public List<java.util.Map<String, Object>> fetchFiiReports(String symbols, String startDate) {
+        try {
+            BrapiFiiRawListResponse response = webClient.get()
+                    .uri(u -> {
+                        var b = u.path("/api/v2/fii/reports")
+                                .queryParam("symbols", symbols)
+                                .queryParam("limit", 10000)
+                                .queryParam("sortOrder", "desc");
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        return b.build();
+                    })
+                    .retrieve()
+                    .bodyToMono(BrapiFiiRawListResponse.class)
+                    .block();
+            if (response == null || response.items() == null) return List.of();
+            return response.items().stream().filter(i -> i != null && i.get("symbol") != null).toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch FII reports for [{}]: {}", symbols, e.getMessage());
             return List.of();
         }
     }
