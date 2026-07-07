@@ -40,6 +40,13 @@ public class FiiAnalysisService {
     /** Market prices trade on business days, so annualization uses 252 periods. */
     private static final double PERIODS_PER_YEAR = 252.0;
 
+    /**
+     * A diversified brick-and-mortar FII effectively never runs above ~40% vacancy; a
+     * summary rate at/above this is a bad brapi filing (every property flagged ~100%
+     * vacant) and is ignored in favor of the latest sane quarter.
+     */
+    private static final double IMPLAUSIBLE_VACANCY = 0.60;
+
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JpaFiiIndicatorRepository fiiRepo;
@@ -224,13 +231,9 @@ public class FiiAnalysisService {
             drawdown1y = maxDrawdown(bars, lastDate.minusYears(1));
         }
 
-        Double vacancyRate = null;
         Map<String, Object> propertiesDoc = loadDocument(fii.getSymbol(), "properties");
         Map<String, Object> portfolioDoc = loadDocument(fii.getSymbol(), "portfolio");
         Map<String, Object> reportDoc = loadDocument(fii.getSymbol(), "report");
-        if (propertiesDoc != null) {
-            vacancyRate = pctField(mapField(propertiesDoc, "summary"), "vacancyRate");
-        }
 
         // management fee: the report carries the monthly rate as a fraction of equity — annualize it
         Double adminFeeRate = null;
@@ -239,17 +242,33 @@ public class FiiAnalysisService {
             if (monthlyFee != null && monthlyFee > 0) adminFeeRate = round4(monthlyFee * 12.0 * 100.0);
         }
 
+        // Vacancy: skip bad brapi filings (implausibly high) and take the most recent sane
+        // quarter for both the headline value and the trend.
         Map<String, Double> vacancyHistory = new LinkedHashMap<>();
+        Double vacancyRate = null;
         for (FiiDocumentJpaEntity doc : documentRepo.findBySymbolAndDocTypeOrderByReferenceDateAsc(fii.getSymbol(), "properties_history")) {
             try {
                 Map<String, Object> parsed = JSON.readValue(doc.getRawJson(), new TypeReference<Map<String, Object>>() {});
-                Double rate = pctField(mapField(parsed, "summary"), "vacancyRate");
-                if (rate != null) vacancyHistory.put(doc.getReferenceDate(), rate);
+                Double raw = numField(mapField(parsed, "summary"), "vacancyRate");
+                if (raw == null || raw < 0 || raw >= IMPLAUSIBLE_VACANCY) continue;
+                Double asPct = round2(raw * 100.0);
+                vacancyHistory.put(doc.getReferenceDate(), asPct);
+                vacancyRate = asPct; // ascending order → last assignment is the most recent sane quarter
             } catch (Exception e) {
                 log.warn("Failed to parse FII properties_history document {}/{}: {}", fii.getSymbol(), doc.getReferenceDate(), e.getMessage());
             }
         }
+        Double currentFilingVacancy = propertiesDoc != null
+                ? numField(mapField(propertiesDoc, "summary"), "vacancyRate") : null;
+        boolean propertiesFilingPlausible = currentFilingVacancy == null
+                || (currentFilingVacancy >= 0 && currentFilingVacancy < IMPLAUSIBLE_VACANCY);
+        // no history rows but a plausible current filing → use it directly
+        if (vacancyRate == null && currentFilingVacancy != null && propertiesFilingPlausible) {
+            vacancyRate = round2(currentFilingVacancy * 100.0);
+        }
 
+        // Show the property list even for a bad filing (names/areas/revenue are still useful),
+        // but blank out the per-property vacancy when the filing is implausible.
         List<FiiAnalysisDTO.PropertyItem> properties = new ArrayList<>();
         if (propertiesDoc != null) {
             Object rawList = propertiesDoc.get("properties");
@@ -258,9 +277,10 @@ public class FiiAnalysisService {
                     if (!(o instanceof Map<?, ?> m)) continue;
                     @SuppressWarnings("unchecked")
                     Map<String, Object> item = (Map<String, Object>) m;
+                    Double propVacancy = propertiesFilingPlausible ? pctField(item, "vacancyRate") : null;
                     properties.add(new FiiAnalysisDTO.PropertyItem(
                             strField(item, "name"), strField(item, "address"), strField(item, "propertyClass"),
-                            numField(item, "area"), pctField(item, "vacancyRate"), pctField(item, "revenueShare")));
+                            numField(item, "area"), propVacancy, pctField(item, "revenueShare")));
                 }
             }
             properties.sort(Comparator.comparing(FiiAnalysisDTO.PropertyItem::revenueShare,
