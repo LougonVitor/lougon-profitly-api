@@ -121,17 +121,9 @@ public class FiiAnalysisService {
             if (dividendsSum6m > 0) dividendYield6m = round2(dividendsSum6m / fii.getPrice() * 100.0);
         }
 
-        // DY médio 5 anos: for each of the last 5 completed calendar years, annual DY =
-        // that year's total dividends ÷ its year-end price; then average. This is the
-        // textbook "N-year average dividend yield" and includes low-payout years (e.g. 2021).
-        LinkedHashMap<Integer, Double> yearEndPrice = new LinkedHashMap<>();
-        for (FiiIndicatorHistoryJpaEntity h : history) { // ascending → the last price per year is its year-end
-            if (h.getReferenceDate() == null || h.getReferenceDate().length() < 4) continue;
-            if (h.getPrice() == null || h.getPrice() <= 0) continue;
-            try {
-                yearEndPrice.put(Integer.parseInt(h.getReferenceDate().substring(0, 4)), h.getPrice());
-            } catch (NumberFormatException ignored) { /* skip malformed year */ }
-        }
+        // DY médio 5 anos: the average yearly payout over the last 5 completed years measured
+        // against the CURRENT price — "if I buy today, what average yield have the last years
+        // paid" (this is how Investidor10 quotes it). Uses each year's total dividends.
         Map<Integer, Double> yearDividends = new LinkedHashMap<>();
         for (FiiDividendEventJpaEntity d : dividends) {
             if (d.getRate() == null || d.getPaymentDate() == null || d.getPaymentDate().length() < 4) continue;
@@ -139,18 +131,16 @@ public class FiiAnalysisService {
                 yearDividends.merge(Integer.parseInt(d.getPaymentDate().substring(0, 4)), d.getRate(), Double::sum);
             } catch (NumberFormatException ignored) { /* skip malformed year */ }
         }
-        List<Double> annualDys = new ArrayList<>();
-        int currentYear = now.getYear();
-        for (int y = currentYear - 5; y < currentYear; y++) {
-            Double px = yearEndPrice.get(y);
-            Double dv = yearDividends.get(y);
-            if (px != null && px > 0 && dv != null && dv > 0) annualDys.add(dv / px * 100.0);
-        }
         Double avgDividendYield = null;
-        if (!annualDys.isEmpty()) {
-            double s = 0;
-            for (double v : annualDys) s += v;
-            avgDividendYield = round2(s / annualDys.size());
+        int currentYear = now.getYear();
+        double sum5y = 0;
+        int yearsCounted = 0;
+        for (int y = currentYear - 5; y < currentYear; y++) {
+            Double dv = yearDividends.get(y);
+            if (dv != null && dv > 0) { sum5y += dv; yearsCounted++; }
+        }
+        if (yearsCounted > 0 && fii.getPrice() != null && fii.getPrice() > 0) {
+            avgDividendYield = round2((sum5y / yearsCounted) / fii.getPrice() * 100.0);
         }
 
         // ranking + siblings within the same segment
