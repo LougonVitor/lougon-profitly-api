@@ -121,6 +121,14 @@ public class FiiAnalysisService {
             if (dividendsSum6m > 0) dividendYield6m = round2(dividendsSum6m / fii.getPrice() * 100.0);
         }
 
+        // monthly DY: brapi frequently reports 0/null, so derive it from the last payout on the
+        // current price (matches Investidor10's "Yield 1 mês"); fall back to brapi's value.
+        Double dividendYield1m = pct(fii.getDividendYield1m());
+        if ((dividendYield1m == null || dividendYield1m == 0.0)
+                && lastDividend != null && fii.getPrice() != null && fii.getPrice() > 0) {
+            dividendYield1m = round2(lastDividend / fii.getPrice() * 100.0);
+        }
+
         // DY médio 5 anos: the average yearly payout over the last 5 completed years measured
         // against the CURRENT price — "if I buy today, what average yield have the last years
         // paid" (this is how Investidor10 quotes it). Uses each year's total dividends.
@@ -322,7 +330,7 @@ public class FiiAnalysisService {
                 fii.getEquity(), fii.getTotalAssets(), fii.getTotalInvestors(), fii.getSharesOutstanding(),
                 fii.getAsOfDate(), fii.getSyncedAt(),
                 pct(fii.getMonthlyReturn()),
-                pct(fii.getDividendYield12m()), pct(fii.getDividendYield1m()),
+                pct(fii.getDividendYield12m()), dividendYield1m,
                 dividendCount12m > 0 ? round4(dividendsSum12m) : null,
                 dividendCount12m > 0 ? dividendCount12m : null,
                 lastDividend,
