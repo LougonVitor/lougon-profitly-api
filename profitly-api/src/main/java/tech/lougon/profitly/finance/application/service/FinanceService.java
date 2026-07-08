@@ -26,17 +26,20 @@ public class FinanceService {
     private final ExpenseHistoryRepository historyRepository;
     private final RecurringExpenseRepository recurringExpenseRepository;
     private final AdditionalIncomeRepository additionalIncomeRepository;
+    private final BudgetLimitRepository budgetLimitRepository;
 
     public FinanceService(ExpenseRepository expenseRepository,
                           FinanceSettingsRepository settingsRepository,
                           ExpenseHistoryRepository historyRepository,
                           RecurringExpenseRepository recurringExpenseRepository,
-                          AdditionalIncomeRepository additionalIncomeRepository) {
+                          AdditionalIncomeRepository additionalIncomeRepository,
+                          BudgetLimitRepository budgetLimitRepository) {
         this.expenseRepository = expenseRepository;
         this.settingsRepository = settingsRepository;
         this.historyRepository = historyRepository;
         this.recurringExpenseRepository = recurringExpenseRepository;
         this.additionalIncomeRepository = additionalIncomeRepository;
+        this.budgetLimitRepository = budgetLimitRepository;
     }
 
     @Transactional
@@ -81,7 +84,8 @@ public class FinanceService {
         // Reload after auto-population
         var updatedExpenses = expenseRepository.findByUserId(userId);
         var additionalIncomes = additionalIncomeRepository.findByUserIdOrderByCreatedAtDesc(userId);
-        return CurrentPeriodDTO.from(updatedExpenses, settings, additionalIncomes);
+        var budgetLimits = budgetLimitRepository.findByUserId(userId);
+        return CurrentPeriodDTO.from(updatedExpenses, settings, additionalIncomes, budgetLimits);
     }
 
     public ExpenseDTO addExpense(String userId, AddExpenseRequest req) {
@@ -258,6 +262,25 @@ public class FinanceService {
         var income = additionalIncomeRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Renda não encontrada"));
         additionalIncomeRepository.deleteById(income.id());
+    }
+
+    // Budget limit methods
+
+    public List<BudgetLimit> getBudgetLimits(String userId) {
+        return budgetLimitRepository.findByUserId(userId);
+    }
+
+    /** Upsert the monthly cap for a category (one limit per user + type). */
+    public BudgetLimit saveBudgetLimit(String userId, BudgetLimitRequest req) {
+        Long existingId = budgetLimitRepository.findByUserIdAndType(userId, req.type())
+                .map(BudgetLimit::id).orElse(null);
+        return budgetLimitRepository.save(
+                new BudgetLimit(existingId, userId, req.type(), req.monthlyLimit()));
+    }
+
+    @Transactional
+    public void deleteBudgetLimit(String userId, ExpenseType type) {
+        budgetLimitRepository.deleteByUserIdAndType(userId, type);
     }
 
     private FinanceSettings getOrCreateSettings(String userId) {

@@ -6,6 +6,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import tech.lougon.profitly.finance.application.dto.*;
 import tech.lougon.profitly.finance.application.service.FinanceService;
+import tech.lougon.profitly.finance.domain.model.ExpenseType;
 import tech.lougon.profitly.finance.presentation.request.*;
 import tech.lougon.profitly.finance.presentation.response.AdditionalIncomeResponse;
 import tech.lougon.profitly.finance.presentation.response.FinanceSettingsResponse;
@@ -112,6 +113,25 @@ public class FinanceController {
     public ResponseEntity<Void> deleteIncome(@AuthenticationPrincipal String userId,
                                               @PathVariable Long id) {
         financeService.deleteIncome(userId, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/budget-limits")
+    public ResponseEntity<List<BudgetLimitDTO>> getBudgetLimits(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(financeService.getBudgetLimits(userId).stream()
+                .map(BudgetLimitDTO::from).toList());
+    }
+
+    @PutMapping("/budget-limits")
+    public ResponseEntity<BudgetLimitDTO> saveBudgetLimit(@AuthenticationPrincipal String userId,
+                                                          @Valid @RequestBody BudgetLimitRequest req) {
+        return ResponseEntity.ok(BudgetLimitDTO.from(financeService.saveBudgetLimit(userId, req)));
+    }
+
+    @DeleteMapping("/budget-limits/{type}")
+    public ResponseEntity<Void> deleteBudgetLimit(@AuthenticationPrincipal String userId,
+                                                  @PathVariable ExpenseType type) {
+        financeService.deleteBudgetLimit(userId, type);
         return ResponseEntity.noContent().build();
     }
 }

@@ -36,6 +36,7 @@ class FinanceServiceTest {
     private InMemoryHistoryRepo history;
     private InMemoryRecurringRepo recurring;
     private InMemoryIncomeRepo incomes;
+    private InMemoryBudgetLimitRepo budgetLimits;
 
     @BeforeEach
     void setUp() {
@@ -44,7 +45,8 @@ class FinanceServiceTest {
         history = new InMemoryHistoryRepo();
         recurring = new InMemoryRecurringRepo();
         incomes = new InMemoryIncomeRepo();
-        service = new FinanceService(expenses, settings, history, recurring, incomes);
+        budgetLimits = new InMemoryBudgetLimitRepo();
+        service = new FinanceService(expenses, settings, history, recurring, incomes, budgetLimits);
     }
 
     // ── computeStatus (via addExpense) ─────────────────────────────────────────
@@ -189,6 +191,25 @@ class FinanceServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ── budget limits ────────────────────────────────────────────────────────────
+
+    @Test
+    void savingBudgetLimitTwiceForSameCategoryUpserts() {
+        service.saveBudgetLimit(USER, new BudgetLimitRequest(ExpenseType.SUPERMARKET, bd(800)));
+        service.saveBudgetLimit(USER, new BudgetLimitRequest(ExpenseType.SUPERMARKET, bd(900)));
+
+        var limits = service.getBudgetLimits(USER);
+        assertThat(limits).hasSize(1);
+        assertThat(limits.get(0).monthlyLimit()).isEqualByComparingTo(bd(900));
+    }
+
+    @Test
+    void currentPeriodExposesBudgetLimits() {
+        service.saveBudgetLimit(USER, new BudgetLimitRequest(ExpenseType.LEISURE, bd(300)));
+        assertThat(service.getCurrentPeriod(USER).budgetLimits())
+                .anyMatch(l -> l.type() == ExpenseType.LEISURE && l.monthlyLimit().compareTo(bd(300)) == 0);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────
 
     private ExpenseDTO addExpense(String title, BigDecimal est, BigDecimal real, ExpenseType type) {
@@ -296,5 +317,26 @@ class FinanceServiceTest {
             return Optional.ofNullable(store.get(id)).filter(a -> a.userId().equals(userId));
         }
         public void deleteById(Long id) { store.remove(id); }
+    }
+
+    static class InMemoryBudgetLimitRepo implements BudgetLimitRepository {
+        private final List<BudgetLimit> store = new ArrayList<>();
+        private final AtomicLong seq = new AtomicLong();
+        public BudgetLimit save(BudgetLimit b) {
+            store.removeIf(x -> x.userId().equals(b.userId()) && x.type() == b.type());
+            BudgetLimit saved = new BudgetLimit(
+                    b.id() != null ? b.id() : seq.incrementAndGet(), b.userId(), b.type(), b.monthlyLimit());
+            store.add(saved);
+            return saved;
+        }
+        public List<BudgetLimit> findByUserId(String userId) {
+            return store.stream().filter(b -> b.userId().equals(userId)).toList();
+        }
+        public Optional<BudgetLimit> findByUserIdAndType(String userId, ExpenseType type) {
+            return store.stream().filter(b -> b.userId().equals(userId) && b.type() == type).findFirst();
+        }
+        public void deleteByUserIdAndType(String userId, ExpenseType type) {
+            store.removeIf(b -> b.userId().equals(userId) && b.type() == type);
+        }
     }
 }
