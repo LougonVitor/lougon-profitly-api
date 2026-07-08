@@ -37,6 +37,7 @@ class FinanceServiceTest {
     private InMemoryRecurringRepo recurring;
     private InMemoryIncomeRepo incomes;
     private InMemoryBudgetLimitRepo budgetLimits;
+    private InMemoryRecurringIncomeRepo recurringIncomes;
 
     @BeforeEach
     void setUp() {
@@ -46,7 +47,8 @@ class FinanceServiceTest {
         recurring = new InMemoryRecurringRepo();
         incomes = new InMemoryIncomeRepo();
         budgetLimits = new InMemoryBudgetLimitRepo();
-        service = new FinanceService(expenses, settings, history, recurring, incomes, budgetLimits);
+        recurringIncomes = new InMemoryRecurringIncomeRepo();
+        service = new FinanceService(expenses, settings, history, recurring, incomes, budgetLimits, recurringIncomes);
     }
 
     // ── computeStatus (via addExpense) ─────────────────────────────────────────
@@ -147,7 +149,7 @@ class FinanceServiceTest {
     @Test
     void deletingRecurringKeepsExpenseThatHasRecordedSpending() {
         RecurringExpense tmpl = service.saveRecurring(USER,
-                new RecurringExpenseRequest("Aluguel", bd(1500), ExpenseType.HOME));
+                new RecurringExpenseRequest("Aluguel", bd(1500), ExpenseType.HOME, 5, false));
         service.getCurrentPeriod(USER); // auto-populates the linked expense
         Expense generated = expenses.findByUserId(USER).stream()
                 .filter(e -> e.title().equals("Aluguel")).findFirst().orElseThrow();
@@ -166,7 +168,7 @@ class FinanceServiceTest {
     @Test
     void deletingRecurringRemovesUntouchedExpense() {
         RecurringExpense tmpl = service.saveRecurring(USER,
-                new RecurringExpenseRequest("Netflix", bd(40), ExpenseType.SIGNATURE));
+                new RecurringExpenseRequest("Netflix", bd(40), ExpenseType.SIGNATURE, null, false));
         service.getCurrentPeriod(USER);
 
         service.deleteRecurring(USER, tmpl.id());
@@ -189,6 +191,32 @@ class FinanceServiceTest {
     void historyRejectsMalformedMonth() {
         assertThatThrownBy(() -> service.getHistory(USER, "2024-13-oops", null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ── recurring income ─────────────────────────────────────────────────────────
+
+    @Test
+    void recurringIncomeIsInjectedIntoTheCurrentPeriodOnce() {
+        service.saveRecurringIncome(USER, new RecurringIncomeRequest("Aluguel recebido", bd(1200), 5));
+
+        service.getCurrentPeriod(USER);
+        service.getCurrentPeriod(USER); // second call must not duplicate
+
+        var injected = incomes.findByUserIdOrderByCreatedAtDesc(USER).stream()
+                .filter(i -> i.description().equals("Aluguel recebido")).toList();
+        assertThat(injected).hasSize(1);
+        assertThat(injected.get(0).amount()).isEqualByComparingTo(bd(1200));
+    }
+
+    @Test
+    void deletingRecurringIncomeRemovesTheUntouchedInjectedIncome() {
+        var tmpl = service.saveRecurringIncome(USER, new RecurringIncomeRequest("Mesada", bd(300), null));
+        service.getCurrentPeriod(USER);
+
+        service.deleteRecurringIncome(USER, tmpl.id());
+
+        assertThat(incomes.findByUserIdOrderByCreatedAtDesc(USER))
+                .noneMatch(i -> i.description().equals("Mesada"));
     }
 
     // ── budget limits ────────────────────────────────────────────────────────────
@@ -288,7 +316,8 @@ class FinanceServiceTest {
         private final AtomicLong seq = new AtomicLong();
         public RecurringExpense save(RecurringExpense r) {
             Long id = r.id() != null ? r.id() : seq.incrementAndGet();
-            RecurringExpense saved = new RecurringExpense(id, r.userId(), r.title(), r.estimatedValue(), r.type());
+            RecurringExpense saved = new RecurringExpense(id, r.userId(), r.title(), r.estimatedValue(),
+                    r.type(), r.dueDay(), r.variable());
             store.put(id, saved);
             return saved;
         }
@@ -306,7 +335,7 @@ class FinanceServiceTest {
         public AdditionalIncome save(AdditionalIncome a) {
             Long id = a.id() != null ? a.id() : seq.incrementAndGet();
             AdditionalIncome saved = new AdditionalIncome(id, a.userId(), a.description(), a.amount(),
-                    a.createdAt() != null ? a.createdAt() : Instant.now());
+                    a.createdAt() != null ? a.createdAt() : Instant.now(), a.recurringIncomeId());
             store.put(id, saved);
             return saved;
         }
@@ -338,5 +367,23 @@ class FinanceServiceTest {
         public void deleteByUserIdAndType(String userId, ExpenseType type) {
             store.removeIf(b -> b.userId().equals(userId) && b.type() == type);
         }
+    }
+
+    static class InMemoryRecurringIncomeRepo implements RecurringIncomeRepository {
+        private final Map<Long, RecurringIncome> store = new LinkedHashMap<>();
+        private final AtomicLong seq = new AtomicLong();
+        public RecurringIncome save(RecurringIncome r) {
+            Long id = r.id() != null ? r.id() : seq.incrementAndGet();
+            RecurringIncome saved = new RecurringIncome(id, r.userId(), r.description(), r.amount(), r.dueDay());
+            store.put(id, saved);
+            return saved;
+        }
+        public List<RecurringIncome> findByUserId(String userId) {
+            return store.values().stream().filter(r -> r.userId().equals(userId)).toList();
+        }
+        public Optional<RecurringIncome> findByIdAndUserId(Long id, String userId) {
+            return Optional.ofNullable(store.get(id)).filter(r -> r.userId().equals(userId));
+        }
+        public void deleteById(Long id) { store.remove(id); }
     }
 }

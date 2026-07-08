@@ -4,14 +4,12 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import tech.lougon.profitly.finance.domain.model.ExpenseType;
+import jakarta.validation.constraints.Positive;
 
 import java.math.BigDecimal;
 
-public record RecurringExpenseRequest(
-        @NotBlank String title,
-        BigDecimal estimatedValue,
-        @NotNull ExpenseType type,
-        @Min(1) @Max(31) Integer dueDay,
-        boolean variable
+public record RecurringIncomeRequest(
+        @NotBlank String description,
+        @NotNull @Positive BigDecimal amount,
+        @Min(1) @Max(31) Integer dueDay
 ) {}

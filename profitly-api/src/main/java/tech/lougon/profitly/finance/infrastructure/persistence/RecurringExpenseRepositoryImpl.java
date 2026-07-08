@@ -49,10 +49,13 @@ public class RecurringExpenseRepositoryImpl implements RecurringExpenseRepositor
         e.setTitle(r.title());
         e.setEstimatedValue(r.estimatedValue());
         e.setType(r.type());
+        e.setDueDay(r.dueDay());
+        e.setVariable(r.variable());
         return e;
     }
 
     private RecurringExpense toDomain(RecurringExpenseJpaEntity e) {
-        return new RecurringExpense(e.getId(), e.getUserId(), e.getTitle(), e.getEstimatedValue(), e.getType());
+        return new RecurringExpense(e.getId(), e.getUserId(), e.getTitle(), e.getEstimatedValue(),
+                e.getType(), e.getDueDay(), e.isVariable());
     }
 }

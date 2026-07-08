@@ -43,10 +43,12 @@ public class AdditionalIncomeRepositoryImpl implements AdditionalIncomeRepositor
         e.setDescription(a.description());
         e.setAmount(a.amount());
         e.setCreatedAt(a.createdAt());
+        e.setRecurringIncomeId(a.recurringIncomeId());
         return e;
     }
 
     private AdditionalIncome toDomain(AdditionalIncomeJpaEntity e) {
-        return new AdditionalIncome(e.getId(), e.getUserId(), e.getDescription(), e.getAmount(), e.getCreatedAt());
+        return new AdditionalIncome(e.getId(), e.getUserId(), e.getDescription(), e.getAmount(),
+                e.getCreatedAt(), e.getRecurringIncomeId());
     }
 }

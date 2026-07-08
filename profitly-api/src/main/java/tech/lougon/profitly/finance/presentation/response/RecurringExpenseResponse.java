@@ -8,9 +8,12 @@ public record RecurringExpenseResponse(
         Long id,
         String title,
         BigDecimal estimatedValue,
-        String type
+        String type,
+        Integer dueDay,
+        boolean variable
 ) {
     public static RecurringExpenseResponse from(RecurringExpense r) {
-        return new RecurringExpenseResponse(r.id(), r.title(), r.estimatedValue(), r.type().name());
+        return new RecurringExpenseResponse(r.id(), r.title(), r.estimatedValue(), r.type().name(),
+                r.dueDay(), r.variable());
     }
 }

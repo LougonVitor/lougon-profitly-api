@@ -1,13 +1,12 @@
 package tech.lougon.profitly.finance.domain.model;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 
-public record AdditionalIncome(
+/** A template income (salary top-up, allowance, etc.) injected into each period. */
+public record RecurringIncome(
         Long id,
         String userId,
         String description,
         BigDecimal amount,
-        Instant createdAt,
-        Long recurringIncomeId
+        Integer dueDay
 ) {}

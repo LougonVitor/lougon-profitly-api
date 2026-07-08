@@ -3,11 +3,10 @@ package tech.lougon.profitly.finance.infrastructure.persistence;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 
 @Entity
-@Table(name = "finance_additional_income")
-public class AdditionalIncomeJpaEntity {
+@Table(name = "finance_recurring_income")
+public class RecurringIncomeJpaEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,13 +21,10 @@ public class AdditionalIncomeJpaEntity {
     @Column(nullable = false)
     private BigDecimal amount;
 
-    @Column(nullable = false)
-    private Instant createdAt;
+    // Day of the month the income typically lands (1-31), null if not tracked.
+    private Integer dueDay;
 
-    // Links an auto-injected income back to its recurring-income template; null for one-offs.
-    private Long recurringIncomeId;
-
-    public AdditionalIncomeJpaEntity() {}
+    public RecurringIncomeJpaEntity() {}
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -38,8 +34,6 @@ public class AdditionalIncomeJpaEntity {
     public void setDescription(String description) { this.description = description; }
     public BigDecimal getAmount() { return amount; }
     public void setAmount(BigDecimal amount) { this.amount = amount; }
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
-    public Long getRecurringIncomeId() { return recurringIncomeId; }
-    public void setRecurringIncomeId(Long recurringIncomeId) { this.recurringIncomeId = recurringIncomeId; }
+    public Integer getDueDay() { return dueDay; }
+    public void setDueDay(Integer dueDay) { this.dueDay = dueDay; }
 }

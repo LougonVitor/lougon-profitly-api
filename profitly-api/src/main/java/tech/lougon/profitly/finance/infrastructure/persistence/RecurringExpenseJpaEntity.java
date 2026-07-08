@@ -25,6 +25,13 @@ public class RecurringExpenseJpaEntity {
     @Column(nullable = false)
     private ExpenseType type;
 
+    // Day of the month the expense is typically due (1-31), null if not tracked.
+    private Integer dueDay;
+
+    // Variable-amount templates carry only a hint estimate; fixed ones repeat the same value.
+    @Column(nullable = false)
+    private boolean variable;
+
     public RecurringExpenseJpaEntity() {}
 
     public Long getId() { return id; }
@@ -37,4 +44,8 @@ public class RecurringExpenseJpaEntity {
     public void setEstimatedValue(BigDecimal estimatedValue) { this.estimatedValue = estimatedValue; }
     public ExpenseType getType() { return type; }
     public void setType(ExpenseType type) { this.type = type; }
+    public Integer getDueDay() { return dueDay; }
+    public void setDueDay(Integer dueDay) { this.dueDay = dueDay; }
+    public boolean isVariable() { return variable; }
+    public void setVariable(boolean variable) { this.variable = variable; }
 }

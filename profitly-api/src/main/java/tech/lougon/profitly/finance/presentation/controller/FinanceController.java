@@ -11,6 +11,7 @@ import tech.lougon.profitly.finance.presentation.request.*;
 import tech.lougon.profitly.finance.presentation.response.AdditionalIncomeResponse;
 import tech.lougon.profitly.finance.presentation.response.FinanceSettingsResponse;
 import tech.lougon.profitly.finance.presentation.response.RecurringExpenseResponse;
+import tech.lougon.profitly.finance.presentation.response.RecurringIncomeResponse;
 
 import java.util.List;
 
@@ -113,6 +114,25 @@ public class FinanceController {
     public ResponseEntity<Void> deleteIncome(@AuthenticationPrincipal String userId,
                                               @PathVariable Long id) {
         financeService.deleteIncome(userId, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/recurring-income")
+    public ResponseEntity<List<RecurringIncomeResponse>> getRecurringIncome(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(financeService.getRecurringIncome(userId).stream()
+                .map(RecurringIncomeResponse::from).toList());
+    }
+
+    @PostMapping("/recurring-income")
+    public ResponseEntity<RecurringIncomeResponse> saveRecurringIncome(@AuthenticationPrincipal String userId,
+                                                                       @Valid @RequestBody RecurringIncomeRequest req) {
+        return ResponseEntity.ok(RecurringIncomeResponse.from(financeService.saveRecurringIncome(userId, req)));
+    }
+
+    @DeleteMapping("/recurring-income/{id}")
+    public ResponseEntity<Void> deleteRecurringIncome(@AuthenticationPrincipal String userId,
+                                                      @PathVariable Long id) {
+        financeService.deleteRecurringIncome(userId, id);
         return ResponseEntity.noContent().build();
     }
 

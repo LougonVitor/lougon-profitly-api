@@ -27,19 +27,22 @@ public class FinanceService {
     private final RecurringExpenseRepository recurringExpenseRepository;
     private final AdditionalIncomeRepository additionalIncomeRepository;
     private final BudgetLimitRepository budgetLimitRepository;
+    private final RecurringIncomeRepository recurringIncomeRepository;
 
     public FinanceService(ExpenseRepository expenseRepository,
                           FinanceSettingsRepository settingsRepository,
                           ExpenseHistoryRepository historyRepository,
                           RecurringExpenseRepository recurringExpenseRepository,
                           AdditionalIncomeRepository additionalIncomeRepository,
-                          BudgetLimitRepository budgetLimitRepository) {
+                          BudgetLimitRepository budgetLimitRepository,
+                          RecurringIncomeRepository recurringIncomeRepository) {
         this.expenseRepository = expenseRepository;
         this.settingsRepository = settingsRepository;
         this.historyRepository = historyRepository;
         this.recurringExpenseRepository = recurringExpenseRepository;
         this.additionalIncomeRepository = additionalIncomeRepository;
         this.budgetLimitRepository = budgetLimitRepository;
+        this.recurringIncomeRepository = recurringIncomeRepository;
     }
 
     @Transactional
@@ -79,6 +82,25 @@ public class FinanceService {
                     null, BigDecimal.ZERO, ExpenseStatus.PENDING,
                     ExpenseType.INVESTMENT, Instant.now(), true, null);
             expenseRepository.save(investmentExpense);
+        }
+
+        // Auto-inject recurring incomes not yet present this period (link, then legacy description)
+        var recurringIncomes = recurringIncomeRepository.findByUserId(userId);
+        var currentIncomes = additionalIncomeRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        Set<Long> linkedIncomeIds = currentIncomes.stream()
+                .map(AdditionalIncome::recurringIncomeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<String> existingDescriptions = currentIncomes.stream()
+                .map(i -> i.description().toLowerCase())
+                .collect(Collectors.toSet());
+        for (RecurringIncome ri : recurringIncomes) {
+            boolean present = linkedIncomeIds.contains(ri.id())
+                    || existingDescriptions.contains(ri.description().toLowerCase());
+            if (!present) {
+                additionalIncomeRepository.save(new AdditionalIncome(null, userId, ri.description(),
+                        ri.amount(), Instant.now(), ri.id()));
+            }
         }
 
         // Reload after auto-population
@@ -221,7 +243,8 @@ public class FinanceService {
     }
 
     public RecurringExpense saveRecurring(String userId, RecurringExpenseRequest req) {
-        var recurring = new RecurringExpense(null, userId, req.title(), req.estimatedValue(), req.type());
+        var recurring = new RecurringExpense(null, userId, req.title(), req.estimatedValue(), req.type(),
+                req.dueDay(), req.variable());
         return recurringExpenseRepository.save(recurring);
     }
 
@@ -254,7 +277,7 @@ public class FinanceService {
     // Additional income methods
 
     public AdditionalIncome addIncome(String userId, AddIncomeRequest req) {
-        var income = new AdditionalIncome(null, userId, req.description(), req.amount(), Instant.now());
+        var income = new AdditionalIncome(null, userId, req.description(), req.amount(), Instant.now(), null);
         return additionalIncomeRepository.save(income);
     }
 
@@ -262,6 +285,38 @@ public class FinanceService {
         var income = additionalIncomeRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Renda não encontrada"));
         additionalIncomeRepository.deleteById(income.id());
+    }
+
+    // Recurring income methods
+
+    public List<RecurringIncome> getRecurringIncome(String userId) {
+        return recurringIncomeRepository.findByUserId(userId);
+    }
+
+    public RecurringIncome saveRecurringIncome(String userId, RecurringIncomeRequest req) {
+        var income = new RecurringIncome(null, userId, req.description(), req.amount(), req.dueDay());
+        return recurringIncomeRepository.save(income);
+    }
+
+    @Transactional
+    public void deleteRecurringIncome(String userId, Long id) {
+        var template = recurringIncomeRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Renda recorrente não encontrada"));
+
+        // Remove the current-period income this template injected, unless it was edited to a
+        // different amount (then keep it as a one-off) — always detach so it survives standalone.
+        additionalIncomeRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .filter(i -> id.equals(i.recurringIncomeId()))
+                .forEach(i -> {
+                    if (i.amount().compareTo(template.amount()) == 0) {
+                        additionalIncomeRepository.deleteById(i.id());
+                    } else {
+                        additionalIncomeRepository.save(new AdditionalIncome(i.id(), i.userId(),
+                                i.description(), i.amount(), i.createdAt(), null));
+                    }
+                });
+
+        recurringIncomeRepository.deleteById(id);
     }
 
     // Budget limit methods
