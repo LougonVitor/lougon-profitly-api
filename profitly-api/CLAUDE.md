@@ -10,7 +10,7 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 
 - Fonte: brapi.dev (token PRO via env `BRAPI_TOKEN`, header `Authorization` sem "Bearer")
 - Postgres em Docker (container `postgres`, db `profitly`, user `postgres`) — consultas via `docker exec postgres psql -U postgres -d profitly -c "..."`
-- `ddl-auto=update`: nunca mudar TIPO de coluna existente (criar coluna nova); respeitar limites como `tickers.sub_type varchar(30)`
+- `ddl-auto=update`: nunca mudar TIPO de coluna existente (criar coluna nova); respeitar limites como `tickers.sub_type varchar(30)`. **Coluna nova NOT NULL em tabela já populada precisa de default** (ex.: `@Column(nullable=false, columnDefinition="boolean default false")`), senão o `ALTER ... add column ... not null` falha (`contains null values`)
 - Padrão "raw JSON": demonstrativos e históricos de indicadores guardam a linha inteira do brapi em `stock_statements.raw_json` — nada se perde quando o brapi adiciona campos
 
 ## Fórmulas validadas (não regredir)

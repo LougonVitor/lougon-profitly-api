@@ -29,7 +29,8 @@ public class RecurringExpenseJpaEntity {
     private Integer dueDay;
 
     // Variable-amount templates carry only a hint estimate; fixed ones repeat the same value.
-    @Column(nullable = false)
+    // Default backfills existing rows so ddl-auto can add the column to a populated table.
+    @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean variable;
 
     public RecurringExpenseJpaEntity() {}
