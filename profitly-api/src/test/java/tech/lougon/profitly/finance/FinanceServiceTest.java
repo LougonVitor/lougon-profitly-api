@@ -38,6 +38,7 @@ class FinanceServiceTest {
     private InMemoryIncomeRepo incomes;
     private InMemoryBudgetLimitRepo budgetLimits;
     private InMemoryRecurringIncomeRepo recurringIncomes;
+    private BigDecimal investedStub = BigDecimal.ZERO;
 
     @BeforeEach
     void setUp() {
@@ -48,7 +49,8 @@ class FinanceServiceTest {
         incomes = new InMemoryIncomeRepo();
         budgetLimits = new InMemoryBudgetLimitRepo();
         recurringIncomes = new InMemoryRecurringIncomeRepo();
-        service = new FinanceService(expenses, settings, history, recurring, incomes, budgetLimits, recurringIncomes);
+        service = new FinanceService(expenses, settings, history, recurring, incomes, budgetLimits,
+                recurringIncomes, (userId, since) -> investedStub);
     }
 
     // ── computeStatus (via addExpense) ─────────────────────────────────────────
@@ -110,6 +112,19 @@ class FinanceServiceTest {
     void getCurrentPeriodCreatesInvestmentRow() {
         CurrentPeriodDTO period = service.getCurrentPeriod(USER);
         assertThat(period.expenses()).anyMatch(e -> e.type() == ExpenseType.INVESTMENT);
+    }
+
+    @Test
+    void investmentRowReflectsMoneyInvestedThisMonth() {
+        investedStub = bd(750);
+
+        CurrentPeriodDTO period = service.getCurrentPeriod(USER);
+
+        assertThat(period.investedThisMonth()).isEqualByComparingTo(bd(750));
+        var inv = period.expenses().stream()
+                .filter(e -> e.type() == ExpenseType.INVESTMENT).findFirst().orElseThrow();
+        assertThat(inv.realValue()).isEqualByComparingTo(bd(750));
+        assertThat(inv.status()).isEqualTo(ExpenseStatus.PAID); // no target set → paid once invested
     }
 
     // ── reset / archiving ───────────────────────────────────────────────────────

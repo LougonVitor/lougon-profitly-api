@@ -3,6 +3,7 @@ package tech.lougon.profitly.finance.application.service;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.lougon.profitly.finance.domain.model.*;
+import tech.lougon.profitly.finance.domain.port.InvestedLookup;
 import tech.lougon.profitly.finance.domain.repository.*;
 import tech.lougon.profitly.finance.presentation.request.*;
 import tech.lougon.profitly.finance.application.dto.*;
@@ -28,6 +29,7 @@ public class FinanceService {
     private final AdditionalIncomeRepository additionalIncomeRepository;
     private final BudgetLimitRepository budgetLimitRepository;
     private final RecurringIncomeRepository recurringIncomeRepository;
+    private final InvestedLookup investedLookup;
 
     public FinanceService(ExpenseRepository expenseRepository,
                           FinanceSettingsRepository settingsRepository,
@@ -35,7 +37,8 @@ public class FinanceService {
                           RecurringExpenseRepository recurringExpenseRepository,
                           AdditionalIncomeRepository additionalIncomeRepository,
                           BudgetLimitRepository budgetLimitRepository,
-                          RecurringIncomeRepository recurringIncomeRepository) {
+                          RecurringIncomeRepository recurringIncomeRepository,
+                          InvestedLookup investedLookup) {
         this.expenseRepository = expenseRepository;
         this.settingsRepository = settingsRepository;
         this.historyRepository = historyRepository;
@@ -43,6 +46,7 @@ public class FinanceService {
         this.additionalIncomeRepository = additionalIncomeRepository;
         this.budgetLimitRepository = budgetLimitRepository;
         this.recurringIncomeRepository = recurringIncomeRepository;
+        this.investedLookup = investedLookup;
     }
 
     @Transactional
@@ -103,11 +107,14 @@ public class FinanceService {
             }
         }
 
-        // Reload after auto-population
-        var updatedExpenses = expenseRepository.findByUserId(userId);
+        // Sync the Investimento row with money actually invested this period (wallet buys)
+        BigDecimal invested = investedLookup.investedSince(userId, currentPeriodStart(settings.resetDay()));
+
+        // Reload after auto-population, then reflect the invested amount on the investment row
+        var updatedExpenses = syncInvestmentReal(expenseRepository.findByUserId(userId), invested);
         var additionalIncomes = additionalIncomeRepository.findByUserIdOrderByCreatedAtDesc(userId);
         var budgetLimits = budgetLimitRepository.findByUserId(userId);
-        return CurrentPeriodDTO.from(updatedExpenses, settings, additionalIncomes, budgetLimits);
+        return CurrentPeriodDTO.from(updatedExpenses, settings, additionalIncomes, budgetLimits, invested);
     }
 
     public ExpenseDTO addExpense(String userId, AddExpenseRequest req) {
@@ -234,6 +241,26 @@ public class FinanceService {
 
     private String archiveYearMonth() {
         return YM_FMT.format(YearMonth.now());
+    }
+
+    /** Start of the current budget period: the most recent occurrence of resetDay on/before today. */
+    private LocalDate currentPeriodStart(int resetDay) {
+        LocalDate today = LocalDate.now();
+        int day = Math.min(resetDay, today.lengthOfMonth());
+        LocalDate candidate = today.withDayOfMonth(day);
+        return today.isBefore(candidate) ? candidate.minusMonths(1) : candidate;
+    }
+
+    /** Reflect the amount actually invested this period on the INVESTMENT row (persisting if changed). */
+    private List<Expense> syncInvestmentReal(List<Expense> expenses, BigDecimal invested) {
+        return expenses.stream().map(e -> {
+            if (e.type() != ExpenseType.INVESTMENT) return e;
+            if (e.realValue() != null && e.realValue().compareTo(invested) == 0) return e;
+            Expense updated = new Expense(e.id(), e.userId(), e.title(), e.estimatedValue(),
+                    invested, computeStatus(invested, e.estimatedValue()), e.type(), e.createdAt(),
+                    e.recurring(), e.recurringExpenseId());
+            return expenseRepository.save(updated);
+        }).toList();
     }
 
     // Recurring expense methods
