@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -142,11 +143,20 @@ public class FinanceService {
     }
 
     public HistoryDTO getHistory(String userId, String from, String to) {
-        String fromYM = from != null ? from : YM_FMT.format(YearMonth.now().minusMonths(11));
-        String toYM = to != null ? to : YM_FMT.format(YearMonth.now());
+        String fromYM = normalizeYearMonth(from, YM_FMT.format(YearMonth.now().minusMonths(11)));
+        String toYM = normalizeYearMonth(to, YM_FMT.format(YearMonth.now()));
         var summaries = historyRepository.findByUserIdAndYearMonthBetween(userId, fromYM, toYM);
         var months = historyRepository.findDistinctYearMonthsByUserId(userId);
         return HistoryDTO.from(summaries, months);
+    }
+
+    private String normalizeYearMonth(String value, String fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return YM_FMT.format(YearMonth.parse(value, YM_FMT));
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("Formato de mês inválido (use yyyy-MM): " + value);
+        }
     }
 
     @Transactional

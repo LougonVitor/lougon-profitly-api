@@ -6,10 +6,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import tech.lougon.profitly.finance.application.dto.*;
 import tech.lougon.profitly.finance.application.service.FinanceService;
-import tech.lougon.profitly.finance.domain.model.AdditionalIncome;
-import tech.lougon.profitly.finance.domain.model.FinanceSettings;
-import tech.lougon.profitly.finance.domain.model.RecurringExpense;
 import tech.lougon.profitly.finance.presentation.request.*;
+import tech.lougon.profitly.finance.presentation.response.AdditionalIncomeResponse;
+import tech.lougon.profitly.finance.presentation.response.FinanceSettingsResponse;
+import tech.lougon.profitly.finance.presentation.response.RecurringExpenseResponse;
 
 import java.util.List;
 
@@ -55,14 +55,14 @@ public class FinanceController {
     }
 
     @GetMapping("/settings")
-    public ResponseEntity<FinanceSettings> getSettings(@AuthenticationPrincipal String userId) {
-        return ResponseEntity.ok(financeService.getSettings(userId));
+    public ResponseEntity<FinanceSettingsResponse> getSettings(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(FinanceSettingsResponse.from(financeService.getSettings(userId)));
     }
 
     @PutMapping("/settings")
-    public ResponseEntity<FinanceSettings> updateSettings(@AuthenticationPrincipal String userId,
-                                                           @RequestBody FinanceSettingsRequest req) {
-        return ResponseEntity.ok(financeService.updateSettings(userId, req));
+    public ResponseEntity<FinanceSettingsResponse> updateSettings(@AuthenticationPrincipal String userId,
+                                                                  @RequestBody FinanceSettingsRequest req) {
+        return ResponseEntity.ok(FinanceSettingsResponse.from(financeService.updateSettings(userId, req)));
     }
 
     @GetMapping("/history")
@@ -84,14 +84,15 @@ public class FinanceController {
     }
 
     @GetMapping("/recurring")
-    public ResponseEntity<List<RecurringExpense>> getRecurring(@AuthenticationPrincipal String userId) {
-        return ResponseEntity.ok(financeService.getRecurring(userId));
+    public ResponseEntity<List<RecurringExpenseResponse>> getRecurring(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(financeService.getRecurring(userId).stream()
+                .map(RecurringExpenseResponse::from).toList());
     }
 
     @PostMapping("/recurring")
-    public ResponseEntity<RecurringExpense> saveRecurring(@AuthenticationPrincipal String userId,
-                                                           @Valid @RequestBody RecurringExpenseRequest req) {
-        return ResponseEntity.ok(financeService.saveRecurring(userId, req));
+    public ResponseEntity<RecurringExpenseResponse> saveRecurring(@AuthenticationPrincipal String userId,
+                                                                  @Valid @RequestBody RecurringExpenseRequest req) {
+        return ResponseEntity.ok(RecurringExpenseResponse.from(financeService.saveRecurring(userId, req)));
     }
 
     @DeleteMapping("/recurring/{id}")
@@ -102,9 +103,9 @@ public class FinanceController {
     }
 
     @PostMapping("/income")
-    public ResponseEntity<AdditionalIncome> addIncome(@AuthenticationPrincipal String userId,
-                                                       @Valid @RequestBody AddIncomeRequest req) {
-        return ResponseEntity.ok(financeService.addIncome(userId, req));
+    public ResponseEntity<AdditionalIncomeResponse> addIncome(@AuthenticationPrincipal String userId,
+                                                              @Valid @RequestBody AddIncomeRequest req) {
+        return ResponseEntity.ok(AdditionalIncomeResponse.from(financeService.addIncome(userId, req)));
     }
 
     @DeleteMapping("/income/{id}")
