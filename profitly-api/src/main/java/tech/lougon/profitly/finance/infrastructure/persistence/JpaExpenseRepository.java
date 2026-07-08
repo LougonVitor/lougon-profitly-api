@@ -1,6 +1,8 @@
 package tech.lougon.profitly.finance.infrastructure.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import tech.lougon.profitly.finance.domain.model.ExpenseType;
 
 import java.util.List;
@@ -10,4 +12,8 @@ public interface JpaExpenseRepository extends JpaRepository<ExpenseJpaEntity, Lo
     List<ExpenseJpaEntity> findByUserIdOrderByCreatedAtAsc(String userId);
     Optional<ExpenseJpaEntity> findByUserIdAndTitleIgnoreCase(String userId, String title);
     List<ExpenseJpaEntity> findByUserIdAndTypeOrderByCreatedAtAsc(String userId, ExpenseType type);
+
+    @Modifying
+    @Query("DELETE FROM ExpenseJpaEntity e WHERE e.userId = :userId")
+    void deleteAllByUserId(String userId);
 }

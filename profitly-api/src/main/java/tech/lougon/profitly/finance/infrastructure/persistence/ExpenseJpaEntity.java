@@ -40,6 +40,10 @@ public class ExpenseJpaEntity {
     @Column(nullable = false)
     private boolean recurring;
 
+    // Links an auto-populated expense back to the recurring template that spawned it.
+    // Null for one-off (avulso) expenses and the special investment row.
+    private Long recurringExpenseId;
+
     public ExpenseJpaEntity() {}
 
     public Long getId() { return id; }
@@ -60,4 +64,6 @@ public class ExpenseJpaEntity {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public boolean isRecurring() { return recurring; }
     public void setRecurring(boolean recurring) { this.recurring = recurring; }
+    public Long getRecurringExpenseId() { return recurringExpenseId; }
+    public void setRecurringExpenseId(Long recurringExpenseId) { this.recurringExpenseId = recurringExpenseId; }
 }

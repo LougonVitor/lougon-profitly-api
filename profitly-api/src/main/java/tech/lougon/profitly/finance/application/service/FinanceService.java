@@ -43,17 +43,25 @@ public class FinanceService {
         var settings = getOrCreateSettings(userId);
         var expenses = expenseRepository.findByUserId(userId);
 
-        // Auto-populate recurring expenses not yet in current period
+        // Auto-populate recurring expenses not yet in current period.
+        // Match on the template link (robust to renames); fall back to title for legacy
+        // rows created before the link column existed.
         var recurringList = recurringExpenseRepository.findByUserId(userId);
+        Set<Long> linkedRecurringIds = expenses.stream()
+                .map(Expense::recurringExpenseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
         Set<String> existingTitles = expenses.stream()
                 .map(e -> e.title().toLowerCase())
                 .collect(Collectors.toSet());
 
         for (RecurringExpense recurring : recurringList) {
-            if (!existingTitles.contains(recurring.title().toLowerCase())) {
+            boolean alreadyPresent = linkedRecurringIds.contains(recurring.id())
+                    || existingTitles.contains(recurring.title().toLowerCase());
+            if (!alreadyPresent) {
                 var newExpense = new Expense(null, userId, recurring.title(),
                         recurring.estimatedValue(), BigDecimal.ZERO,
-                        ExpenseStatus.PENDING, recurring.type(), Instant.now(), true);
+                        ExpenseStatus.PENDING, recurring.type(), Instant.now(), true, recurring.id());
                 expenseRepository.save(newExpense);
             }
         }
@@ -65,7 +73,7 @@ public class FinanceService {
         if (investmentExpenses.isEmpty()) {
             var investmentExpense = new Expense(null, userId, "Investimento",
                     null, BigDecimal.ZERO, ExpenseStatus.PENDING,
-                    ExpenseType.INVESTMENT, Instant.now(), true);
+                    ExpenseType.INVESTMENT, Instant.now(), true, null);
             expenseRepository.save(investmentExpense);
         }
 
@@ -80,7 +88,7 @@ public class FinanceService {
         var expense = new Expense(null, userId, req.title(),
                 req.estimatedValue(), realValue,
                 computeStatus(realValue, req.estimatedValue()),
-                req.type(), Instant.now(), req.recurring());
+                req.type(), Instant.now(), req.recurring(), null);
         return ExpenseDTO.from(expenseRepository.save(expense));
     }
 
@@ -93,7 +101,8 @@ public class FinanceService {
         ExpenseStatus status = computeStatus(newReal, estimated);
 
         var updated = new Expense(existing.id(), existing.userId(), existing.title(),
-                estimated, newReal, status, existing.type(), existing.createdAt(), existing.recurring());
+                estimated, newReal, status, existing.type(), existing.createdAt(),
+                existing.recurring(), existing.recurringExpenseId());
         return ExpenseDTO.from(expenseRepository.save(updated));
     }
 
@@ -110,7 +119,7 @@ public class FinanceService {
                 req.title() != null ? req.title() : existing.title(),
                 estimated, realValue, status,
                 req.type() != null ? req.type() : existing.type(),
-                existing.createdAt(), existing.recurring());
+                existing.createdAt(), existing.recurring(), existing.recurringExpenseId());
         return ExpenseDTO.from(expenseRepository.save(updated));
     }
 
@@ -140,12 +149,13 @@ public class FinanceService {
         return HistoryDTO.from(summaries, months);
     }
 
+    @Transactional
     public void resetPeriod(String userId) {
         var expenses = expenseRepository.findByUserId(userId);
         if (expenses.isEmpty()) return;
 
-        // Archive under the previous month — reset fires on day 1 of the new month
-        String yearMonth = YM_FMT.format(YearMonth.now().minusMonths(1));
+        // Archive under the month in which the period is being closed
+        String yearMonth = archiveYearMonth();
 
         Map<ExpenseType, BigDecimal[]> grouped = new EnumMap<>(ExpenseType.class);
         for (Expense e : expenses) {
@@ -164,22 +174,30 @@ public class FinanceService {
         historyRepository.deleteByUserIdAndYearMonth(userId, yearMonth);
         historyRepository.saveAll(summaries);
 
-        // Retain only the last 6 months
-        String cutoff = YM_FMT.format(YearMonth.now().minusMonths(6));
+        // Retain a rolling 12 months of history (matches the default history window)
+        String cutoff = YM_FMT.format(YearMonth.now().minusMonths(12));
         historyRepository.deleteOlderThan(userId, cutoff);
 
-        for (Expense e : expenses) expenseRepository.deleteById(e.id());
+        expenseRepository.deleteAllByUserId(userId);
     }
 
     public boolean hasPeriodConflict(String userId) {
-        String targetMonth = YM_FMT.format(YearMonth.now().minusMonths(1));
-        return historyRepository.existsByUserIdAndYearMonth(userId, targetMonth);
+        return historyRepository.existsByUserIdAndYearMonth(userId, archiveYearMonth());
     }
 
-    public void checkAndResetIfDue(String userId) {
+    @Transactional
+    public boolean checkAndResetIfDue(String userId) {
         var settings = getOrCreateSettings(userId);
-        int today = LocalDate.now().getDayOfMonth();
-        if (today == settings.resetDay()) resetPeriod(userId);
+        LocalDate now = LocalDate.now();
+        // Clamp the reset day to the month length so short months (e.g. Feb) still fire.
+        int effectiveResetDay = Math.min(settings.resetDay(), now.lengthOfMonth());
+        if (now.getDayOfMonth() != effectiveResetDay) return false;
+        resetPeriod(userId);
+        return true;
+    }
+
+    private String archiveYearMonth() {
+        return YM_FMT.format(YearMonth.now());
     }
 
     // Recurring expense methods
@@ -199,9 +217,22 @@ public class FinanceService {
                 .orElseThrow(() -> new IllegalArgumentException("Recorrente não encontrado"));
         if (!recurring.userId().equals(userId)) throw new IllegalArgumentException("Acesso negado");
 
-        // Also delete matching expense in current period (case-insensitive title match)
-        expenseRepository.findByUserIdAndTitle(userId, recurring.title())
-                .ifPresent(e -> expenseRepository.deleteById(e.id()));
+        // Detach the current-period expense spawned by this template. Delete it only if
+        // nothing has been recorded yet; otherwise keep it as a one-off so real spending
+        // is never lost when a template is removed.
+        expenseRepository.findByUserId(userId).stream()
+                .filter(e -> id.equals(e.recurringExpenseId())
+                        || (e.recurringExpenseId() == null && e.title().equalsIgnoreCase(recurring.title())))
+                .findFirst()
+                .ifPresent(e -> {
+                    if (e.realValue() == null || e.realValue().compareTo(BigDecimal.ZERO) == 0) {
+                        expenseRepository.deleteById(e.id());
+                    } else {
+                        expenseRepository.save(new Expense(e.id(), e.userId(), e.title(),
+                                e.estimatedValue(), e.realValue(), e.status(), e.type(),
+                                e.createdAt(), false, null));
+                    }
+                });
 
         recurringExpenseRepository.deleteById(id);
     }
@@ -214,7 +245,9 @@ public class FinanceService {
     }
 
     public void deleteIncome(String userId, Long id) {
-        additionalIncomeRepository.deleteById(id);
+        var income = additionalIncomeRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Renda não encontrada"));
+        additionalIncomeRepository.deleteById(income.id());
     }
 
     private FinanceSettings getOrCreateSettings(String userId) {
@@ -223,11 +256,15 @@ public class FinanceService {
     }
 
     private ExpenseStatus computeStatus(BigDecimal real, BigDecimal estimated) {
-        if (estimated == null || estimated.compareTo(BigDecimal.ZERO) == 0) return ExpenseStatus.PAID;
+        boolean hasReal = real != null && real.compareTo(BigDecimal.ZERO) > 0;
+        // No estimate: paid only once something is actually recorded; otherwise still pending.
+        if (estimated == null || estimated.compareTo(BigDecimal.ZERO) == 0) {
+            return hasReal ? ExpenseStatus.PAID : ExpenseStatus.PENDING;
+        }
         int cmp = real.compareTo(estimated);
         if (cmp > 0) return ExpenseStatus.OVERRUN;
         if (cmp == 0) return ExpenseStatus.PAID;
-        if (real.compareTo(BigDecimal.ZERO) > 0) return ExpenseStatus.PARTIAL;
+        if (hasReal) return ExpenseStatus.PARTIAL;
         return ExpenseStatus.PENDING;
     }
 }

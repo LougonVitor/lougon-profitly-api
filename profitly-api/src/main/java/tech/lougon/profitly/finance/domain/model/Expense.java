@@ -12,5 +12,6 @@ public record Expense(
         ExpenseStatus status,
         ExpenseType type,
         Instant createdAt,
-        boolean recurring
+        boolean recurring,
+        Long recurringExpenseId
 ) {}

@@ -11,4 +11,5 @@ public interface ExpenseRepository {
     List<Expense> findByUserId(String userId);
     Optional<Expense> findByUserIdAndTitle(String userId, String title);
     void deleteById(Long id);
+    void deleteAllByUserId(String userId);
 }

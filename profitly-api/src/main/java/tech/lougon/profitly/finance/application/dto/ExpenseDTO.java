@@ -15,10 +15,11 @@ public record ExpenseDTO(
         ExpenseStatus status,
         ExpenseType type,
         Instant createdAt,
-        boolean recurring
+        boolean recurring,
+        Long recurringExpenseId
 ) {
     public static ExpenseDTO from(Expense e) {
         return new ExpenseDTO(e.id(), e.title(), e.estimatedValue(),
-                e.realValue(), e.status(), e.type(), e.createdAt(), e.recurring());
+                e.realValue(), e.status(), e.type(), e.createdAt(), e.recurring(), e.recurringExpenseId());
     }
 }

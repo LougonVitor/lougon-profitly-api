@@ -5,6 +5,7 @@ import tech.lougon.profitly.finance.domain.model.AdditionalIncome;
 import tech.lougon.profitly.finance.domain.repository.AdditionalIncomeRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class AdditionalIncomeRepositoryImpl implements AdditionalIncomeRepository {
@@ -23,6 +24,11 @@ public class AdditionalIncomeRepositoryImpl implements AdditionalIncomeRepositor
     @Override
     public List<AdditionalIncome> findByUserIdOrderByCreatedAtDesc(String userId) {
         return jpa.findByUserIdOrderByCreatedAtDesc(userId).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public Optional<AdditionalIncome> findByIdAndUserId(Long id, String userId) {
+        return jpa.findByIdAndUserId(id, userId).map(this::toDomain);
     }
 
     @Override
