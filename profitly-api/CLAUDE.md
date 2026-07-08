@@ -88,8 +88,20 @@ FII tem vertical dedicada e ISOLADA de Fundos (não reusar as tabelas/serviços 
 - `FiiIndicatorSyncScheduler`: list → saveCurrent → syncIndicators (lote 20, enriquece) → indicator history (backfill 2016/incremental 3m) → dividendos (dedup por symbol+paymentDate+rate) → documentos (reports 13m + properties/portfolio + *_history) → preço (backfill 2015/incremental 3m) → variação diária
 - `profitly.sync.fii-on-startup=false` — ligar só durante dev ativo da tela de FII (cron das 19h30 mantém os dados). **Sync completo dos 1028 FIIs leva ~10-15 min** e a brapi limita (rate limit) — erros intermitentes "Token não fornecido" são normais, o sync trata por lote
 
-## Estado (2026-07-06)
+## Finanças pessoais (módulo `finance`) — NÃO usa brapi
+
+Orçamento mensal por usuário, isolado da parte de investimentos. Camadas DDD normais. Tudo escopado por `userId` (o `@AuthenticationPrincipal String userId`).
+
+- **Período atual** (`/api/finance/current`): salário (em `finance_settings`) + rendas avulsas (`finance_additional_income`) como entradas; tabela de gastos (`finance_expenses`) com edição inline; linha especial "Investimento" (type `INVESTMENT`) auto-criada; status por linha (PAID/PARTIAL/PENDING/OVERRUN via `computeStatus` — gasto sem estimativa e sem valor é PENDING, não PAID)
+- **Recorrentes** (`finance_recurring_expenses`): templates injetados a cada período. O gasto gerado guarda `recurringExpenseId` apontando para o template (robusto a renomear); só cai no fallback por título p/ linhas legadas. Apagar template preserva gasto já lançado (só apaga se `realValue==0`, senão desvincula: `recurring=false`, link null)
+- **Fechar período** (`resetPeriod`, `@Transactional`): agrega por categoria em `finance_expense_history` sob o **mês atual** (`YearMonth.now()` — NÃO o anterior), retém **12 meses** (bate com a janela default do `getHistory`), e apaga os gastos em massa (`deleteAllByUserId`). `hasPeriodConflict` usa o mesmo mês. Auto-fecha no `resetDay` de cada usuário via `FinancePeriodResetScheduler` (00:05 BRT, `checkAndResetIfDue` clampa o dia ao tamanho do mês); flag `profitly.finance.auto-close.enabled=true` (é só banco, sem brapi)
+- **Limites de gasto** (`finance_budget_limits`, 1 por usuário+categoria): CRUD em `/api/finance/budget-limits`, embutidos no payload do período; o front calcula gasto/limite por categoria e alerta em 80% (âmbar) e >100% (vermelho)
+- Controllers retornam **response DTOs** (`presentation/response/*`), nunca models de domínio. `getHistory` valida `from`/`to` como `yyyy-MM` (senão 400)
+- Testes: `FinanceServiceTest` usa repositórios fake em memória (sem Spring/DB) — adicionar casos aqui ao mexer na lógica
+- **Categorias são um enum fixo** (`ExpenseType`, 12 valores) espelhado no front (`TYPE_LABELS`/`TYPE_COLORS`); categorias custom = migração grande, ainda não feita
+
+## Estado (2026-07-07)
 
 - **Completo:** tela de ações (benchmark IBOV, 30 indicadores c/ histórico, comparação setorial, preço justo Graham/Bazin/Gordon, agenda de proventos, demonstrativos 12M/Atual), comparador `/comparar`, syncs de todos os tipos de ativo, tela de criptoativos (retornos, risco, ATH, médias móveis, gráfico BRL/USD, Fear & Greed no BTC), tela de Tesouro Direto (histórico de taxas, faixa 52s, marcação a mercado, comparação por indexador, nomes oficiais Renda+/Educa+), tela de fundos fiagro/fi-infra/fidc/fip (análise avançada, composição de carteira, histórico completo de rendimentos paginado, comparação por tipo paginada), **tela de FIIs no padrão avançado** (Magic Number, DY 1m/3m/6m/12m, DY médio 5a, liquidez diária, taxa de administração efetiva, vacância + imóveis, composição de carteira, faixa 52s, retornos preço/VP, comparação por segmento — todos batendo com o Investidor10)
-- **Frente atual:** — (FII encerrado; `fii-on-startup` desligado. Só ~228/1028 FIIs têm cotação completa: o cron das 19h30 ou um sync manual completa a cauda longa)
+- **Frente atual:** módulo `finance` — passe de correção/segurança feito (IDOR de renda, auto-close, mês de arquivamento, retenção 12m, link recorrente, status), DTOs de resposta + validação, testes, e **limites de gasto por categoria com alerta** (backend + front). Falta decidir com o Vítor: integração da linha Investimento com a carteira (semântica), categorias custom (migração), CSV, MoM, modelo de recorrentes mais rico
 - **Backlog:** carteira integrando tesouro/cripto/fundos/FIIs (usar `fund_dividend_events`/`fii_dividend_events` p/ proventos recebíveis); i18n das seções novas; responsividade mobile
