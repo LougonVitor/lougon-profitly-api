@@ -7,6 +7,7 @@ import tech.lougon.profitly.finance.domain.port.InvestedLookup;
 import tech.lougon.profitly.finance.domain.repository.*;
 import tech.lougon.profitly.finance.presentation.request.*;
 import tech.lougon.profitly.finance.application.dto.*;
+import tech.lougon.profitly.finance.application.csv.CsvSupport;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -344,6 +345,93 @@ public class FinanceService {
                 });
 
         recurringIncomeRepository.deleteById(id);
+    }
+
+    // CSV export / import
+
+    public String exportCurrentCsv(String userId) {
+        var expenses = expenseRepository.findByUserId(userId);
+        StringBuilder sb = new StringBuilder();
+        sb.append(CsvSupport.row("titulo", "tipo", "estimado", "real", "status", "recorrente")).append('\n');
+        for (Expense e : expenses) {
+            sb.append(CsvSupport.row(
+                    e.title(),
+                    e.type().name(),
+                    e.estimatedValue() != null ? e.estimatedValue().toPlainString() : "",
+                    e.realValue() != null ? e.realValue().toPlainString() : "0",
+                    e.status().name(),
+                    String.valueOf(e.recurring()))).append('\n');
+        }
+        return sb.toString();
+    }
+
+    public String exportHistoryCsv(String userId) {
+        var months = historyRepository.findDistinctYearMonthsByUserId(userId);
+        StringBuilder sb = new StringBuilder();
+        sb.append(CsvSupport.row("mes", "tipo", "real", "estimado")).append('\n');
+        if (!months.isEmpty()) {
+            var summaries = historyRepository.findByUserIdAndYearMonthBetween(
+                    userId, months.get(0), months.get(months.size() - 1));
+            for (ExpenseHistorySummary s : summaries) {
+                sb.append(CsvSupport.row(
+                        s.yearMonth(),
+                        s.type().name(),
+                        s.totalReal().toPlainString(),
+                        s.totalEstimated().toPlainString())).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Import expenses into the current period from CSV (columns: titulo,tipo,estimado,real). */
+    @Transactional
+    public int importExpensesCsv(String userId, String csv) {
+        if (csv == null || csv.isBlank()) return 0;
+        String[] lines = csv.split("\\r?\\n");
+        int imported = 0;
+        boolean first = true;
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+            List<String> cols = CsvSupport.parseLine(line);
+            if (first) {
+                first = false;
+                String header = cols.isEmpty() ? "" : cols.get(0).trim().toLowerCase();
+                if (header.startsWith("titulo") || header.startsWith("título") || header.equals("title")) continue;
+            }
+            if (cols.size() < 2) continue;
+            String title = cols.get(0).trim();
+            if (title.isEmpty()) continue;
+
+            ExpenseType type;
+            try {
+                type = ExpenseType.valueOf(cols.get(1).trim().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException("Categoria inválida no CSV: " + cols.get(1));
+            }
+            // The investment row is derived from the wallet — never import one.
+            if (type == ExpenseType.INVESTMENT) continue;
+
+            BigDecimal estimated = parseMoney(cols, 2);
+            BigDecimal real = parseMoney(cols, 3);
+            BigDecimal realVal = real != null ? real : BigDecimal.ZERO;
+            expenseRepository.save(new Expense(null, userId, title, estimated, realVal,
+                    computeStatus(realVal, estimated), type, Instant.now(), false, null));
+            imported++;
+        }
+        return imported;
+    }
+
+    private BigDecimal parseMoney(List<String> cols, int idx) {
+        if (idx >= cols.size()) return null;
+        String v = cols.get(idx).trim().replace("R$", "").replace(" ", "");
+        if (v.isEmpty()) return null;
+        // Accept both "1.234,56" (pt-BR) and "1234.56"
+        if (v.contains(",")) v = v.replace(".", "").replace(",", ".");
+        try {
+            return new BigDecimal(v);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     // Budget limit methods

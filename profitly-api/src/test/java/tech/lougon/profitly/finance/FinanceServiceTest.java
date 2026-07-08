@@ -208,6 +208,51 @@ class FinanceServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ── CSV export / import ───────────────────────────────────────────────────────
+
+    @Test
+    void exportCurrentCsvContainsHeaderAndRows() {
+        addExpense("Mercado, feira", bd(400), bd(380), ExpenseType.SUPERMARKET);
+
+        String csv = service.exportCurrentCsv(USER);
+
+        assertThat(csv).startsWith("titulo,tipo,estimado,real,status,recorrente");
+        // title with a comma must be quoted
+        assertThat(csv).contains("\"Mercado, feira\",SUPERMARKET");
+    }
+
+    @Test
+    void importExpensesCsvCreatesRowsSkippingHeaderAndInvestment() {
+        String csv = """
+                titulo,tipo,estimado,real
+                Aluguel,HOME,1500,1500
+                Uber,LOCOMOTION,,45,90
+                Aporte,INVESTMENT,1000,1000
+                """;
+
+        int imported = service.importExpensesCsv(USER, csv);
+
+        assertThat(imported).isEqualTo(2); // header + INVESTMENT skipped
+        assertThat(expenses.findByUserId(USER)).anyMatch(e ->
+                e.title().equals("Aluguel") && e.type() == ExpenseType.HOME
+                        && e.realValue().compareTo(bd(1500)) == 0);
+        assertThat(expenses.findByUserId(USER)).noneMatch(e -> e.type() == ExpenseType.INVESTMENT);
+    }
+
+    @Test
+    void importExpensesCsvRejectsUnknownCategory() {
+        assertThatThrownBy(() -> service.importExpensesCsv(USER, "Algo,NAO_EXISTE,10,10"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void importExpensesCsvParsesBrazilianMoneyFormat() {
+        service.importExpensesCsv(USER, "titulo,tipo,estimado,real\nConta,HOME,\"1.234,56\",\"1.000,00\"");
+        var e = expenses.findByUserId(USER).stream().filter(x -> x.title().equals("Conta")).findFirst().orElseThrow();
+        assertThat(e.estimatedValue()).isEqualByComparingTo(bd(1234).add(new java.math.BigDecimal("0.56")));
+        assertThat(e.realValue()).isEqualByComparingTo(bd(1000));
+    }
+
     // ── recurring income ─────────────────────────────────────────────────────────
 
     @Test
