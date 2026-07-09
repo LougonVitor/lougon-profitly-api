@@ -96,7 +96,7 @@ class FinanceServiceTest {
 
     @Test
     void currentPeriodComputesIncomeAndBalance() {
-        service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null));
+        service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null, null));
         service.addIncome(USER, new AddIncomeRequest("Freela", bd(1000)));
         addExpense("Mercado", bd(400), bd(400), ExpenseType.SUPERMARKET);
         addExpense("Luz", bd(200), bd(150), ExpenseType.HOME);
@@ -125,6 +125,24 @@ class FinanceServiceTest {
                 .filter(e -> e.type() == ExpenseType.INVESTMENT).findFirst().orElseThrow();
         assertThat(inv.realValue()).isEqualByComparingTo(bd(750));
         assertThat(inv.status()).isEqualTo(ExpenseStatus.PAID); // no target set → paid once invested
+        assertThat(period.investmentAuto()).isTrue(); // default is wallet-driven
+    }
+
+    @Test
+    void manualInvestmentModeKeepsTheEditedRealValue() {
+        investedStub = bd(750);
+        service.updateSettings(USER, new FinanceSettingsRequest(10, null, null, false)); // switch to manual
+
+        var inv = service.getCurrentPeriod(USER).expenses().stream()
+                .filter(e -> e.type() == ExpenseType.INVESTMENT).findFirst().orElseThrow();
+        service.updateExpense(USER, inv.id(), new UpdateExpenseRequest(null, null, bd(300), null, null));
+
+        CurrentPeriodDTO period = service.getCurrentPeriod(USER);
+        var inv2 = period.expenses().stream()
+                .filter(e -> e.type() == ExpenseType.INVESTMENT).findFirst().orElseThrow();
+        assertThat(inv2.realValue()).isEqualByComparingTo(bd(300)); // manual value kept, not overwritten by 750
+        assertThat(period.investedThisMonth()).isEqualByComparingTo(bd(750)); // wallet still reported for reference
+        assertThat(period.investmentAuto()).isFalse();
     }
 
     // ── reset / archiving ───────────────────────────────────────────────────────
@@ -150,7 +168,7 @@ class FinanceServiceTest {
     @Test
     void checkAndResetDoesNothingWhenNotDue() {
         int notToday = java.time.LocalDate.now().getDayOfMonth() == 1 ? 2 : 1;
-        service.updateSettings(USER, new FinanceSettingsRequest(notToday, bd(1000), null));
+        service.updateSettings(USER, new FinanceSettingsRequest(notToday, bd(1000), null, null));
         addExpense("Mercado", bd(400), bd(400), ExpenseType.SUPERMARKET);
 
         boolean fired = service.checkAndResetIfDue(USER);

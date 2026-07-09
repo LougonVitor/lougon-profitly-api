@@ -108,11 +108,16 @@ public class FinanceService {
             }
         }
 
-        // Sync the Investimento row with money actually invested this period (wallet buys)
+        // Money actually invested this period (wallet buys) — always computed so the UI can
+        // show it as a reference, even in manual mode.
         BigDecimal invested = investedLookup.investedSince(userId, currentPeriodStart(settings.resetDay()));
 
-        // Reload after auto-population, then reflect the invested amount on the investment row
-        var updatedExpenses = syncInvestmentReal(expenseRepository.findByUserId(userId), invested);
+        // Reload after auto-population. Only overwrite the Investimento real value from the wallet
+        // when the user keeps it on automatic; in manual mode the stored value is left untouched.
+        var reloaded = expenseRepository.findByUserId(userId);
+        var updatedExpenses = settings.investmentAuto()
+                ? syncInvestmentReal(reloaded, invested)
+                : reloaded;
         var additionalIncomes = additionalIncomeRepository.findByUserIdOrderByCreatedAtDesc(userId);
         var budgetLimits = budgetLimitRepository.findByUserId(userId);
         return CurrentPeriodDTO.from(updatedExpenses, settings, additionalIncomes, budgetLimits, invested);
@@ -168,7 +173,8 @@ public class FinanceService {
     public FinanceSettings updateSettings(String userId, FinanceSettingsRequest req) {
         var settings = new FinanceSettings(userId,
                 req.resetDay() != null ? req.resetDay() : 10,
-                req.netSalary(), req.investmentTarget());
+                req.netSalary(), req.investmentTarget(),
+                req.investmentAuto() == null || req.investmentAuto());
         return settingsRepository.save(settings);
     }
 
@@ -455,7 +461,7 @@ public class FinanceService {
 
     private FinanceSettings getOrCreateSettings(String userId) {
         return settingsRepository.findByUserId(userId)
-                .orElseGet(() -> settingsRepository.save(new FinanceSettings(userId, 10, null, null)));
+                .orElseGet(() -> settingsRepository.save(new FinanceSettings(userId, 10, null, null, true)));
     }
 
     private ExpenseStatus computeStatus(BigDecimal real, BigDecimal estimated) {

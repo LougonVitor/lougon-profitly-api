@@ -7,9 +7,10 @@ import java.math.BigDecimal;
 public record FinanceSettingsResponse(
         int resetDay,
         BigDecimal netSalary,
-        BigDecimal investmentTarget
+        BigDecimal investmentTarget,
+        boolean investmentAuto
 ) {
     public static FinanceSettingsResponse from(FinanceSettings s) {
-        return new FinanceSettingsResponse(s.resetDay(), s.netSalary(), s.investmentTarget());
+        return new FinanceSettingsResponse(s.resetDay(), s.netSalary(), s.investmentTarget(), s.investmentAuto());
     }
 }

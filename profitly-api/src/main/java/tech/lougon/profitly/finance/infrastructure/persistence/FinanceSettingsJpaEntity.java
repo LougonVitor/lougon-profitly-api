@@ -16,6 +16,10 @@ public class FinanceSettingsJpaEntity {
     private BigDecimal netSalary;
     private BigDecimal investmentTarget;
 
+    // true = "Investimento" real vem das compras da carteira; false = valor manual editável
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean investmentAuto = true;
+
     public FinanceSettingsJpaEntity() {}
 
     public String getUserId() { return userId; }
@@ -26,4 +30,6 @@ public class FinanceSettingsJpaEntity {
     public void setNetSalary(BigDecimal netSalary) { this.netSalary = netSalary; }
     public BigDecimal getInvestmentTarget() { return investmentTarget; }
     public void setInvestmentTarget(BigDecimal investmentTarget) { this.investmentTarget = investmentTarget; }
+    public boolean isInvestmentAuto() { return investmentAuto; }
+    public void setInvestmentAuto(boolean investmentAuto) { this.investmentAuto = investmentAuto; }
 }

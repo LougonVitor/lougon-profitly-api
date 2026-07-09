@@ -37,10 +37,12 @@ public class FinanceSettingsRepositoryImpl implements FinanceSettingsRepository 
         e.setResetDay(s.resetDay());
         e.setNetSalary(s.netSalary());
         e.setInvestmentTarget(s.investmentTarget());
+        e.setInvestmentAuto(s.investmentAuto());
         return e;
     }
 
     private FinanceSettings toDomain(FinanceSettingsJpaEntity e) {
-        return new FinanceSettings(e.getUserId(), e.getResetDay(), e.getNetSalary(), e.getInvestmentTarget());
+        return new FinanceSettings(e.getUserId(), e.getResetDay(), e.getNetSalary(),
+                e.getInvestmentTarget(), e.isInvestmentAuto());
     }
 }

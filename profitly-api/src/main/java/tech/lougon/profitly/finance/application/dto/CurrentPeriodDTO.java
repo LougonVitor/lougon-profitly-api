@@ -19,7 +19,8 @@ public record CurrentPeriodDTO(
         List<AdditionalIncome> additionalIncomes,
         BigDecimal totalIncome,
         List<BudgetLimitDTO> budgetLimits,
-        BigDecimal investedThisMonth
+        BigDecimal investedThisMonth,
+        boolean investmentAuto
 ) {
     public static CurrentPeriodDTO from(List<Expense> expenses, FinanceSettings settings,
                                         List<AdditionalIncome> additionalIncomes,
@@ -43,6 +44,6 @@ public record CurrentPeriodDTO(
         List<BudgetLimitDTO> limitDtos = budgetLimits.stream().map(BudgetLimitDTO::from).toList();
         return new CurrentPeriodDTO(dtos, settings.netSalary(), settings.investmentTarget(),
                 totalReal, totalEstimated, balance, settings.resetDay(), additionalIncomes, totalIncome,
-                limitDtos, investedThisMonth);
+                limitDtos, investedThisMonth, settings.investmentAuto());
     }
 }
