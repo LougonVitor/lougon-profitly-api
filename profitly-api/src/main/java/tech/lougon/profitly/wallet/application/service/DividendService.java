@@ -30,11 +30,22 @@ public class DividendService {
         this.dividendEventRepository = dividendEventRepository;
     }
 
-    public List<Dividend> findByWallet(String walletId) {
+    public List<Dividend> findByWallet(String walletId, String userId) {
+        requireOwnedWallet(walletId, userId);
         return repository.findByWalletId(walletId);
     }
 
+    private tech.lougon.profitly.wallet.domain.model.Wallet requireOwnedWallet(String walletId, String userId) {
+        var wallet = walletRepository.findById(walletId)
+                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+        if (!wallet.userId().equals(userId)) {
+            throw new NoSuchElementException("Wallet not found: " + walletId);
+        }
+        return wallet;
+    }
+
     public Dividend add(String walletId, String userId, AddDividendRequest req) {
+        requireOwnedWallet(walletId, userId);
         var dividend = new Dividend(null, walletId, userId,
                 req.ticker().toUpperCase(), req.totalAmount(), req.paymentDate(),
                 null, req.type(), req.received(), Instant.now());
@@ -42,8 +53,7 @@ public class DividendService {
     }
 
     public List<Dividend> syncFromMarket(String walletId, String userId) {
-        var wallet = walletRepository.findById(walletId)
-                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+        var wallet = requireOwnedWallet(walletId, userId);
 
         List<Dividend> created = new ArrayList<>();
 

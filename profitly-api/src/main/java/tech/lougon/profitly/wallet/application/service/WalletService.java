@@ -41,10 +41,19 @@ public class WalletService {
                 .toList();
     }
 
-    public WalletSummaryDTO findById(String id) {
-        Wallet wallet = walletRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + id));
+    public WalletSummaryDTO findById(String id, String userId) {
+        Wallet wallet = requireOwned(id, userId);
         return walletMapper.toSummaryDTO(wallet, resolveMarketData(wallet));
+    }
+
+    /** Loads the wallet and enforces ownership; a wallet of another user behaves as not found. */
+    Wallet requireOwned(String walletId, String userId) {
+        Wallet wallet = walletRepository.findById(walletId)
+                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+        if (!wallet.userId().equals(userId)) {
+            throw new NoSuchElementException("Wallet not found: " + walletId);
+        }
+        return wallet;
     }
 
     public WalletSummaryDTO create(String name, String userId) {
@@ -53,21 +62,20 @@ public class WalletService {
         return walletMapper.toSummaryDTO(saved, Map.of());
     }
 
-    public WalletSummaryDTO rename(String walletId, String name) {
-        Wallet wallet = walletRepository.findById(walletId)
-                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+    public WalletSummaryDTO rename(String walletId, String name, String userId) {
+        Wallet wallet = requireOwned(walletId, userId);
         Wallet renamed = new Wallet(wallet.id(), name, wallet.userId(), wallet.positions(), wallet.createdAt());
         Wallet saved = walletRepository.save(renamed);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
 
-    public void deleteWallet(String walletId) {
+    public void deleteWallet(String walletId, String userId) {
+        requireOwned(walletId, userId);
         walletRepository.deleteById(walletId);
     }
 
-    public WalletSummaryDTO addEntry(String walletId, String ticker, AddEntryRequest request) {
-        Wallet wallet = walletRepository.findById(walletId)
-                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+    public WalletSummaryDTO addEntry(String walletId, String ticker, AddEntryRequest request, String userId) {
+        Wallet wallet = requireOwned(walletId, userId);
 
         String upperTicker = ticker.toUpperCase();
         Optional<WalletPosition> existing = wallet.positions().stream()
@@ -104,9 +112,8 @@ public class WalletService {
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
 
-    public WalletSummaryDTO updateEntry(String walletId, String entryId, UpdateEntryRequest request) {
-        Wallet wallet = walletRepository.findById(walletId)
-                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+    public WalletSummaryDTO updateEntry(String walletId, String entryId, UpdateEntryRequest request, String userId) {
+        Wallet wallet = requireOwned(walletId, userId);
 
         List<WalletPosition> updatedPositions = wallet.positions().stream()
                 .map(position -> {
@@ -124,9 +131,8 @@ public class WalletService {
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
 
-    public WalletSummaryDTO deleteEntry(String walletId, String entryId) {
-        Wallet wallet = walletRepository.findById(walletId)
-                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+    public WalletSummaryDTO deleteEntry(String walletId, String entryId, String userId) {
+        Wallet wallet = requireOwned(walletId, userId);
 
         List<WalletPosition> updatedPositions = wallet.positions().stream()
                 .map(position -> {
@@ -143,9 +149,8 @@ public class WalletService {
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
 
-    public WalletSummaryDTO deletePosition(String walletId, String ticker) {
-        Wallet wallet = walletRepository.findById(walletId)
-                .orElseThrow(() -> new NoSuchElementException("Wallet not found: " + walletId));
+    public WalletSummaryDTO deletePosition(String walletId, String ticker, String userId) {
+        Wallet wallet = requireOwned(walletId, userId);
 
         List<WalletPosition> updatedPositions = wallet.positions().stream()
                 .filter(p -> !p.ticker().equalsIgnoreCase(ticker))

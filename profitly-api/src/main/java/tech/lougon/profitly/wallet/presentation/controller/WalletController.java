@@ -3,7 +3,7 @@ package tech.lougon.profitly.wallet.presentation.controller;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import tech.lougon.profitly.wallet.application.service.WalletService;
 import tech.lougon.profitly.wallet.presentation.request.AddEntryRequest;
@@ -25,8 +25,7 @@ public class WalletController {
     }
 
     @GetMapping
-    public ResponseEntity<List<WalletSummaryResponse>> findAll(Authentication auth) {
-        String userId = (String) auth.getPrincipal();
+    public ResponseEntity<List<WalletSummaryResponse>> findAll(@AuthenticationPrincipal String userId) {
         List<WalletSummaryResponse> response = walletService.findAll(userId).stream()
                 .map(WalletSummaryResponse::from)
                 .toList();
@@ -34,67 +33,73 @@ public class WalletController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<WalletSummaryResponse> findById(@PathVariable String id) {
-        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.findById(id)));
+    public ResponseEntity<WalletSummaryResponse> findById(@AuthenticationPrincipal String userId,
+                                                          @PathVariable String id) {
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.findById(id, userId)));
     }
 
     @PostMapping
     public ResponseEntity<WalletSummaryResponse> create(
             @RequestBody @Valid CreateWalletRequest request,
-            Authentication auth
+            @AuthenticationPrincipal String userId
     ) {
-        String userId = (String) auth.getPrincipal();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(WalletSummaryResponse.from(walletService.create(request.name(), userId)));
     }
 
     @PatchMapping("/{walletId}/name")
     public ResponseEntity<WalletSummaryResponse> rename(
+            @AuthenticationPrincipal String userId,
             @PathVariable String walletId,
             @RequestBody java.util.Map<String, String> body
     ) {
-        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.rename(walletId, body.get("name"))));
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.rename(walletId, body.get("name"), userId)));
     }
 
     @DeleteMapping("/{walletId}")
-    public ResponseEntity<Void> deleteWallet(@PathVariable String walletId) {
-        walletService.deleteWallet(walletId);
+    public ResponseEntity<Void> deleteWallet(@AuthenticationPrincipal String userId,
+                                             @PathVariable String walletId) {
+        walletService.deleteWallet(walletId, userId);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{walletId}/positions/{ticker}/entries")
     public ResponseEntity<WalletSummaryResponse> addEntry(
+            @AuthenticationPrincipal String userId,
             @PathVariable String walletId,
             @PathVariable String ticker,
             @RequestBody AddEntryRequest request
     ) {
-        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.addEntry(walletId, ticker, request)));
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.addEntry(walletId, ticker, request, userId)));
     }
 
     @PutMapping("/{walletId}/positions/{ticker}/entries/{entryId}")
     public ResponseEntity<WalletSummaryResponse> updateEntry(
+            @AuthenticationPrincipal String userId,
             @PathVariable String walletId,
             @PathVariable String ticker,
             @PathVariable String entryId,
             @RequestBody UpdateEntryRequest request
     ) {
-        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.updateEntry(walletId, entryId, request)));
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.updateEntry(walletId, entryId, request, userId)));
     }
 
     @DeleteMapping("/{walletId}/positions/{ticker}/entries/{entryId}")
     public ResponseEntity<WalletSummaryResponse> deleteEntry(
+            @AuthenticationPrincipal String userId,
             @PathVariable String walletId,
             @PathVariable String ticker,
             @PathVariable String entryId
     ) {
-        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.deleteEntry(walletId, entryId)));
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.deleteEntry(walletId, entryId, userId)));
     }
 
     @DeleteMapping("/{walletId}/positions/{ticker}")
     public ResponseEntity<WalletSummaryResponse> deletePosition(
+            @AuthenticationPrincipal String userId,
             @PathVariable String walletId,
             @PathVariable String ticker
     ) {
-        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.deletePosition(walletId, ticker)));
+        return ResponseEntity.ok(WalletSummaryResponse.from(walletService.deletePosition(walletId, ticker, userId)));
     }
 }

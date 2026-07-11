@@ -22,8 +22,9 @@ public class DividendController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Dividend>> list(@PathVariable String walletId) {
-        return ResponseEntity.ok(service.findByWallet(walletId));
+    public ResponseEntity<List<Dividend>> list(@AuthenticationPrincipal String userId,
+                                               @PathVariable String walletId) {
+        return ResponseEntity.ok(service.findByWallet(walletId, userId));
     }
 
     @PostMapping
