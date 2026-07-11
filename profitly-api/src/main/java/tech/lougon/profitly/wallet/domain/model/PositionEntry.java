@@ -10,5 +10,15 @@ public record PositionEntry(
         LocalDate date,
         Integer quantity,
         BigDecimal paidPrice,
+        EntryType type,
         Instant createdAt
-) {}
+) {
+    public EntryType typeOrBuy() {
+        return type != null ? type : EntryType.BUY;
+    }
+
+    /** Positive for buys, negative for sells. */
+    public int signedQuantity() {
+        return typeOrBuy() == EntryType.SELL ? -quantity : quantity;
+    }
+}

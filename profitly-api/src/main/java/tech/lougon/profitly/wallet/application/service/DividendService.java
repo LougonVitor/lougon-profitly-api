@@ -80,7 +80,7 @@ public class DividendService {
 
                 int quantityAtExDate = position.entries().stream()
                         .filter(entry -> !entry.date().isAfter(exDate))
-                        .mapToInt(entry -> entry.quantity())
+                        .mapToInt(entry -> entry.signedQuantity())
                         .sum();
 
                 if (quantityAtExDate <= 0) {

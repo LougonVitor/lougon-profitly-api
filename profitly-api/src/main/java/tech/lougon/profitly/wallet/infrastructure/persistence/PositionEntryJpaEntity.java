@@ -34,6 +34,9 @@ public class PositionEntryJpaEntity {
     @Column(name = "paid_price", precision = 19, scale = 4, nullable = false)
     private BigDecimal paidPrice;
 
+    @Column(name = "entry_type", nullable = false, length = 10, columnDefinition = "varchar(10) default 'BUY'")
+    private String entryType;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 }

@@ -63,6 +63,9 @@ public class InfraWalletMapper {
                 entity.getDate(),
                 entity.getQuantity(),
                 entity.getPaidPrice(),
+                entity.getEntryType() != null
+                        ? tech.lougon.profitly.wallet.domain.model.EntryType.valueOf(entity.getEntryType())
+                        : tech.lougon.profitly.wallet.domain.model.EntryType.BUY,
                 entity.getCreatedAt()
         );
     }
@@ -89,6 +92,7 @@ public class InfraWalletMapper {
         entity.setDate(entry.date());
         entity.setQuantity(entry.quantity());
         entity.setPaidPrice(entry.paidPrice());
+        entity.setEntryType(entry.typeOrBuy().name());
         entity.setCreatedAt(entry.createdAt());
         return entity;
     }

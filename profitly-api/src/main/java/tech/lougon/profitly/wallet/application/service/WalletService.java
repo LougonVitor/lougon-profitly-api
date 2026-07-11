@@ -3,6 +3,7 @@ package tech.lougon.profitly.wallet.application.service;
 import org.springframework.stereotype.Service;
 import tech.lougon.profitly.wallet.application.dto.WalletSummaryDTO;
 import tech.lougon.profitly.wallet.application.mapper.WalletMapper;
+import tech.lougon.profitly.wallet.domain.model.EntryType;
 import tech.lougon.profitly.wallet.domain.model.PositionEntry;
 import tech.lougon.profitly.wallet.domain.model.Wallet;
 import tech.lougon.profitly.wallet.domain.model.WalletPosition;
@@ -78,15 +79,24 @@ public class WalletService {
         Wallet wallet = requireOwned(walletId, userId);
 
         String upperTicker = ticker.toUpperCase();
+        EntryType type = parseType(request.type());
         Optional<WalletPosition> existing = wallet.positions().stream()
                 .filter(p -> p.ticker().equalsIgnoreCase(upperTicker))
                 .findFirst();
+
+        if (type == EntryType.SELL) {
+            int held = existing.map(WalletPosition::totalQuantity).orElse(0);
+            if (request.quantity() == null || request.quantity() > held) {
+                throw new IllegalArgumentException(
+                        "Venda maior que a posição atual (" + held + " unidades de " + upperTicker + ")");
+            }
+        }
 
         List<WalletPosition> updatedPositions;
         if (existing.isPresent()) {
             WalletPosition position = existing.get();
             PositionEntry newEntry = new PositionEntry(
-                    null, position.id(), request.date(), request.quantity(), request.paidPrice(), Instant.now()
+                    null, position.id(), request.date(), request.quantity(), request.paidPrice(), type, Instant.now()
             );
             List<PositionEntry> updatedEntries = new ArrayList<>(position.entries());
             updatedEntries.add(newEntry);
@@ -98,7 +108,7 @@ public class WalletService {
                     .toList();
         } else {
             PositionEntry newEntry = new PositionEntry(
-                    null, null, request.date(), request.quantity(), request.paidPrice(), Instant.now()
+                    null, null, request.date(), request.quantity(), request.paidPrice(), type, Instant.now()
             );
             WalletPosition newPosition = new WalletPosition(
                     null, walletId, upperTicker, List.of(newEntry), Instant.now()
@@ -120,7 +130,8 @@ public class WalletService {
                 .map(position -> {
                     List<PositionEntry> updatedEntries = position.entries().stream()
                             .map(e -> e.id().equals(entryId)
-                                    ? new PositionEntry(e.id(), e.walletPositionId(), request.date(), request.quantity(), request.paidPrice(), e.createdAt())
+                                    ? new PositionEntry(e.id(), e.walletPositionId(), request.date(), request.quantity(), request.paidPrice(),
+                                            request.type() != null ? parseType(request.type()) : e.typeOrBuy(), e.createdAt())
                                     : e)
                             .toList();
                     return new WalletPosition(position.id(), position.walletId(), position.ticker(), updatedEntries, position.createdAt());
@@ -161,6 +172,15 @@ public class WalletService {
         Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt());
         Wallet saved = walletRepository.save(updated);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
+    }
+
+    private EntryType parseType(String raw) {
+        if (raw == null || raw.isBlank()) return EntryType.BUY;
+        try {
+            return EntryType.valueOf(raw.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Tipo de lançamento inválido: " + raw);
+        }
     }
 
     private void requireEntry(Wallet wallet, String entryId) {

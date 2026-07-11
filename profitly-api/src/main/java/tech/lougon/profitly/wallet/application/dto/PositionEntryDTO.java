@@ -8,5 +8,6 @@ public record PositionEntryDTO(
         LocalDate date,
         Integer quantity,
         BigDecimal paidPrice,
+        String type,
         BigDecimal total
 ) {}

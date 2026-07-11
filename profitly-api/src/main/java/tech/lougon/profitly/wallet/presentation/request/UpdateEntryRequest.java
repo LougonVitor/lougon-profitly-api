@@ -6,5 +6,6 @@ import java.time.LocalDate;
 public record UpdateEntryRequest(
         LocalDate date,
         Integer quantity,
-        BigDecimal paidPrice
+        BigDecimal paidPrice,
+        String type
 ) {}

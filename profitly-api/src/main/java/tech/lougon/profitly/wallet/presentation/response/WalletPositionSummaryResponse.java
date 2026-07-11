@@ -19,6 +19,7 @@ public record WalletPositionSummaryResponse(
         BigDecimal currentValue,
         BigDecimal profitOrLoss,
         BigDecimal profitOrLossPercent,
+        BigDecimal realizedProfitOrLoss,
         List<PositionEntryResponse> entries
 ) {
     public static WalletPositionSummaryResponse from(WalletPositionSummaryDTO dto) {
@@ -37,6 +38,7 @@ public record WalletPositionSummaryResponse(
                 dto.currentValue(),
                 dto.profitOrLoss(),
                 dto.profitOrLossPercent(),
+                dto.realizedProfitOrLoss(),
                 entries
         );
     }
@@ -46,10 +48,11 @@ public record WalletPositionSummaryResponse(
             LocalDate date,
             Integer quantity,
             BigDecimal paidPrice,
+            String type,
             BigDecimal total
     ) {
         public static PositionEntryResponse from(PositionEntryDTO dto) {
-            return new PositionEntryResponse(dto.id(), dto.date(), dto.quantity(), dto.paidPrice(), dto.total());
+            return new PositionEntryResponse(dto.id(), dto.date(), dto.quantity(), dto.paidPrice(), dto.type(), dto.total());
         }
     }
 }

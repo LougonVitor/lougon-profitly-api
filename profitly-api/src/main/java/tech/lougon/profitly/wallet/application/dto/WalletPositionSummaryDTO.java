@@ -15,5 +15,6 @@ public record WalletPositionSummaryDTO(
         BigDecimal currentValue,
         BigDecimal profitOrLoss,
         BigDecimal profitOrLossPercent,
+        BigDecimal realizedProfitOrLoss,
         List<PositionEntryDTO> entries
 ) {}

@@ -37,6 +37,10 @@ public class WalletMapper {
                 : profitOrLoss.divide(totalInvested, 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100));
 
+        BigDecimal realized = positions.stream()
+                .map(WalletPositionSummaryDTO::realizedProfitOrLoss)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         return new WalletSummaryDTO(
                 wallet.id(),
                 wallet.name(),
@@ -45,6 +49,7 @@ public class WalletMapper {
                 currentValue,
                 profitOrLoss,
                 profitOrLossPercent,
+                realized,
                 wallet.createdAt()
         );
     }
@@ -82,12 +87,14 @@ public class WalletMapper {
                 currentValue,
                 profitOrLoss,
                 profitOrLossPercent,
+                position.realizedProfitOrLoss(),
                 entries
         );
     }
 
     private PositionEntryDTO toEntryDTO(PositionEntry entry) {
         BigDecimal total = entry.paidPrice().multiply(BigDecimal.valueOf(entry.quantity()));
-        return new PositionEntryDTO(entry.id(), entry.date(), entry.quantity(), entry.paidPrice(), total);
+        return new PositionEntryDTO(entry.id(), entry.date(), entry.quantity(), entry.paidPrice(),
+                entry.typeOrBuy().name(), total);
     }
 }
