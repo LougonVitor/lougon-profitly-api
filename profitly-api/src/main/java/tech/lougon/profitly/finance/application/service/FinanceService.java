@@ -282,15 +282,31 @@ public class FinanceService {
         return recurringExpenseRepository.save(recurring);
     }
 
+    @Transactional
     public RecurringExpense updateRecurring(String userId, Long id, RecurringExpenseRequest req) {
         var existing = recurringExpenseRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Recorrente não encontrado"));
         if (!existing.userId().equals(userId)) throw new IllegalArgumentException("Acesso negado");
-        // Edits the template only; the current period keeps the copy it was already given
-        // (editable there), and future periods inject with the new values.
         var updated = new RecurringExpense(id, userId, req.title(), req.estimatedValue(), req.type(),
                 req.dueDay(), req.variable());
-        return recurringExpenseRepository.save(updated);
+        var saved = recurringExpenseRepository.save(updated);
+
+        // Propagate to the current-period row this template injected, but only while it is
+        // untouched (no real spending recorded) — otherwise the user's actual figures win.
+        // Match on the link, falling back to the template's previous title for legacy rows.
+        expenseRepository.findByUserId(userId).stream()
+                .filter(e -> id.equals(e.recurringExpenseId())
+                        || (e.recurringExpenseId() == null && e.title().equalsIgnoreCase(existing.title())))
+                .findFirst()
+                .ifPresent(e -> {
+                    if (e.realValue() == null || e.realValue().compareTo(BigDecimal.ZERO) == 0) {
+                        expenseRepository.save(new Expense(e.id(), e.userId(), req.title(),
+                                req.estimatedValue(), e.realValue(),
+                                computeStatus(e.realValue(), req.estimatedValue()),
+                                req.type(), e.createdAt(), true, id));
+                    }
+                });
+        return saved;
     }
 
     @Transactional
@@ -341,6 +357,24 @@ public class FinanceService {
     public RecurringIncome saveRecurringIncome(String userId, RecurringIncomeRequest req) {
         var income = new RecurringIncome(null, userId, req.description(), req.amount(), req.dueDay());
         return recurringIncomeRepository.save(income);
+    }
+
+    @Transactional
+    public RecurringIncome updateRecurringIncome(String userId, Long id, RecurringIncomeRequest req) {
+        var existing = recurringIncomeRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Renda recorrente não encontrada"));
+        var updated = new RecurringIncome(id, userId, req.description(), req.amount(), req.dueDay());
+        var saved = recurringIncomeRepository.save(updated);
+
+        // Propagate to the income this template injected in the current period. It only carries
+        // the template's value, so keep it in sync while it still matches the previous amount.
+        additionalIncomeRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .filter(i -> id.equals(i.recurringIncomeId()))
+                .filter(i -> i.amount().compareTo(existing.amount()) == 0)
+                .findFirst()
+                .ifPresent(i -> additionalIncomeRepository.save(new AdditionalIncome(i.id(), i.userId(),
+                        req.description(), req.amount(), i.createdAt(), id)));
+        return saved;
     }
 
     @Transactional

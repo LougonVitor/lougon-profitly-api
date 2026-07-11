@@ -235,6 +235,67 @@ class FinanceServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void updatingRecurringSyncsTheUntouchedCurrentRow() {
+        RecurringExpense tmpl = service.saveRecurring(USER,
+                new RecurringExpenseRequest("Aluguel", bd(1500), ExpenseType.HOME, 5, false));
+        service.getCurrentPeriod(USER); // injects the row into the current period
+
+        service.updateRecurring(USER, tmpl.id(),
+                new RecurringExpenseRequest("Aluguel novo", bd(1600), ExpenseType.HOME, 5, false));
+
+        var row = expenses.findByUserId(USER).stream()
+                .filter(e -> tmpl.id().equals(e.recurringExpenseId())).findFirst().orElseThrow();
+        assertThat(row.title()).isEqualTo("Aluguel novo");
+        assertThat(row.estimatedValue()).isEqualByComparingTo(bd(1600));
+    }
+
+    @Test
+    void updatingRecurringLeavesAPaidCurrentRowUntouched() {
+        RecurringExpense tmpl = service.saveRecurring(USER,
+                new RecurringExpenseRequest("Aluguel", bd(1500), ExpenseType.HOME, 5, false));
+        service.getCurrentPeriod(USER);
+        var injected = expenses.findByUserId(USER).stream()
+                .filter(e -> tmpl.id().equals(e.recurringExpenseId())).findFirst().orElseThrow();
+        service.updateExpense(USER, injected.id(), new UpdateExpenseRequest(null, null, bd(1500), null, null));
+
+        service.updateRecurring(USER, tmpl.id(),
+                new RecurringExpenseRequest("Aluguel novo", bd(1600), ExpenseType.HOME, 5, false));
+
+        var row = expenses.findByUserId(USER).stream()
+                .filter(e -> tmpl.id().equals(e.recurringExpenseId())).findFirst().orElseThrow();
+        assertThat(row.title()).isEqualTo("Aluguel");      // real spending recorded → not clobbered
+        assertThat(row.realValue()).isEqualByComparingTo(bd(1500));
+    }
+
+    @Test
+    void updatingRecurringIncomeChangesTemplateAndSyncsInjected() {
+        var tmpl = service.saveRecurringIncome(USER, new RecurringIncomeRequest("Aluguel recebido", bd(1200), 5));
+        service.getCurrentPeriod(USER); // injects the income
+
+        service.updateRecurringIncome(USER, tmpl.id(),
+                new RecurringIncomeRequest("Aluguel recebido A", bd(1300), 5));
+
+        var updated = service.getRecurringIncome(USER).stream()
+                .filter(r -> r.id().equals(tmpl.id())).findFirst().orElseThrow();
+        assertThat(updated.description()).isEqualTo("Aluguel recebido A");
+        assertThat(updated.amount()).isEqualByComparingTo(bd(1300));
+
+        var injected = incomes.findByUserIdOrderByCreatedAtDesc(USER).stream()
+                .filter(i -> tmpl.id().equals(i.recurringIncomeId())).findFirst().orElseThrow();
+        assertThat(injected.description()).isEqualTo("Aluguel recebido A");
+        assertThat(injected.amount()).isEqualByComparingTo(bd(1300));
+    }
+
+    @Test
+    void updatingRecurringIncomeOfAnotherUserIsRejected() {
+        var tmpl = service.saveRecurringIncome(USER, new RecurringIncomeRequest("Mesada", bd(300), null));
+
+        assertThatThrownBy(() -> service.updateRecurringIncome("attacker", tmpl.id(),
+                new RecurringIncomeRequest("Hack", bd(1), null)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // ── ownership / IDOR ────────────────────────────────────────────────────────
 
     @Test
