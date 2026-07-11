@@ -12,4 +12,5 @@ public interface DividendRepository {
     Optional<Dividend> findById(String id);
     void deleteById(String id);
     boolean existsByWalletIdAndTickerAndPaymentDate(String walletId, String ticker, LocalDate paymentDate);
+    void deleteByWalletId(String walletId);
 }

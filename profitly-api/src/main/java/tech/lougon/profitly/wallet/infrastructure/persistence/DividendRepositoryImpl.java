@@ -38,6 +38,12 @@ public class DividendRepositoryImpl implements DividendRepository {
     }
 
     @Override
+    public void deleteByWalletId(String walletId) {
+        // deleteAll(findBy...) instead of a @Modifying derived delete — no proxy/transaction pitfalls
+        jpa.deleteAll(jpa.findByWalletIdOrderByPaymentDateDesc(walletId));
+    }
+
+    @Override
     public boolean existsByWalletIdAndTickerAndPaymentDate(String walletId, String ticker, LocalDate paymentDate) {
         return jpa.existsByWalletIdAndTickerAndPaymentDate(walletId, ticker, paymentDate);
     }

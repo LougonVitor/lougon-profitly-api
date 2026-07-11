@@ -27,13 +27,16 @@ public class WalletService {
     private final WalletRepository walletRepository;
     private final StockPriceLookup stockPriceLookup;
     private final WalletMapper walletMapper;
+    private final tech.lougon.profitly.wallet.domain.repository.DividendRepository dividendRepository;
 
     public WalletService(WalletRepository walletRepository,
                          StockPriceLookup stockPriceLookup,
-                         WalletMapper walletMapper) {
+                         WalletMapper walletMapper,
+                         tech.lougon.profitly.wallet.domain.repository.DividendRepository dividendRepository) {
         this.walletRepository = walletRepository;
         this.stockPriceLookup = stockPriceLookup;
         this.walletMapper = walletMapper;
+        this.dividendRepository = dividendRepository;
     }
 
     public List<WalletSummaryDTO> findAll(String userId) {
@@ -72,6 +75,8 @@ public class WalletService {
 
     public void deleteWallet(String walletId, String userId) {
         requireOwned(walletId, userId);
+        // wallet_dividends has no FK cascade to wallets — clean up explicitly
+        dividendRepository.deleteByWalletId(walletId);
         walletRepository.deleteById(walletId);
     }
 
