@@ -114,6 +114,7 @@ public class WalletService {
 
     public WalletSummaryDTO updateEntry(String walletId, String entryId, UpdateEntryRequest request, String userId) {
         Wallet wallet = requireOwned(walletId, userId);
+        requireEntry(wallet, entryId);
 
         List<WalletPosition> updatedPositions = wallet.positions().stream()
                 .map(position -> {
@@ -133,6 +134,7 @@ public class WalletService {
 
     public WalletSummaryDTO deleteEntry(String walletId, String entryId, String userId) {
         Wallet wallet = requireOwned(walletId, userId);
+        requireEntry(wallet, entryId);
 
         List<WalletPosition> updatedPositions = wallet.positions().stream()
                 .map(position -> {
@@ -159,6 +161,15 @@ public class WalletService {
         Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt());
         Wallet saved = walletRepository.save(updated);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
+    }
+
+    private void requireEntry(Wallet wallet, String entryId) {
+        boolean exists = wallet.positions().stream()
+                .flatMap(p -> p.entries().stream())
+                .anyMatch(e -> e.id().equals(entryId));
+        if (!exists) {
+            throw new NoSuchElementException("Entry not found: " + entryId);
+        }
     }
 
     private Map<String, StockMarketData> resolveMarketData(Wallet wallet) {
