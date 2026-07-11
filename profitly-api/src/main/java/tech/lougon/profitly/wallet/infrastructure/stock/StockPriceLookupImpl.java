@@ -31,9 +31,13 @@ public class StockPriceLookupImpl implements StockPriceLookup {
                 .or(() -> findCrypto(symbol));
     }
 
-    /** Treasury tickers keep the indexer (ipca/selic) in sub_type — group them as "treasury". */
+    /**
+     * Treasury keeps the indexer (ipca/selic) and FII keeps the segment (tijolo/papel)
+     * in sub_type — group those by asset_type instead.
+     */
     private String resolveType(tech.lougon.profitly.ticker.domain.model.Ticker t) {
         if ("treasury".equalsIgnoreCase(t.assetType())) return "treasury";
+        if ("fii".equalsIgnoreCase(t.assetType())) return "fii";
         return t.subType() != null ? t.subType() : t.assetType();
     }
 
