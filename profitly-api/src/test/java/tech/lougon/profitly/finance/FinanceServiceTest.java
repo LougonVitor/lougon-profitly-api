@@ -166,6 +166,25 @@ class FinanceServiceTest {
     }
 
     @Test
+    void deleteHistoryMonthRemovesTheArchivedMonth() {
+        addExpense("Mercado", bd(400), bd(400), ExpenseType.SUPERMARKET);
+        service.resetPeriod(USER);
+        String thisMonth = YM.format(YearMonth.now());
+        assertThat(history.existsByUserIdAndYearMonth(USER, thisMonth)).isTrue();
+
+        service.deleteHistoryMonth(USER, thisMonth);
+
+        assertThat(history.existsByUserIdAndYearMonth(USER, thisMonth)).isFalse();
+        assertThat(history.findDistinctYearMonthsByUserId(USER)).doesNotContain(thisMonth);
+    }
+
+    @Test
+    void deleteHistoryMonthRejectsBadFormat() {
+        assertThatThrownBy(() -> service.deleteHistoryMonth(USER, "2026-13-x"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void checkAndResetDoesNothingWhenNotDue() {
         int notToday = java.time.LocalDate.now().getDayOfMonth() == 1 ? 2 : 1;
         service.updateSettings(USER, new FinanceSettingsRequest(notToday, bd(1000), null, null));

@@ -190,6 +190,17 @@ public class FinanceService {
         return HistoryDTO.from(summaries, months);
     }
 
+    @Transactional
+    public void deleteHistoryMonth(String userId, String yearMonth) {
+        try {
+            YearMonth.parse(yearMonth, YM_FMT);
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("Formato de mês inválido (use yyyy-MM): " + yearMonth);
+        }
+        // Scoped by userId, so a user can only remove their own archived months.
+        historyRepository.deleteByUserIdAndYearMonth(userId, yearMonth);
+    }
+
     private String normalizeYearMonth(String value, String fallback) {
         if (value == null || value.isBlank()) return fallback;
         try {

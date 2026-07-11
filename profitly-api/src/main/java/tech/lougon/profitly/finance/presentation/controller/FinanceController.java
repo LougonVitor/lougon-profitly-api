@@ -80,6 +80,13 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.getHistory(userId, from, to));
     }
 
+    @DeleteMapping("/history/{yearMonth}")
+    public ResponseEntity<Void> deleteHistoryMonth(@AuthenticationPrincipal String userId,
+                                                   @PathVariable String yearMonth) {
+        financeService.deleteHistoryMonth(userId, yearMonth);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/reset/check")
     public ResponseEntity<Boolean> checkResetConflict(@AuthenticationPrincipal String userId) {
         return ResponseEntity.ok(financeService.hasPeriodConflict(userId));
