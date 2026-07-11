@@ -78,7 +78,10 @@ public class WalletService {
     public WalletSummaryDTO addEntry(String walletId, String ticker, AddEntryRequest request, String userId) {
         Wallet wallet = requireOwned(walletId, userId);
 
-        String upperTicker = ticker.toUpperCase();
+        // Treasury symbols are lowercase in the tickers table; everything else uppercase.
+        String upperTicker = ticker.toLowerCase().startsWith("tesouro")
+                ? ticker.toLowerCase()
+                : ticker.toUpperCase();
         EntryType type = parseType(request.type());
         Optional<WalletPosition> existing = wallet.positions().stream()
                 .filter(p -> p.ticker().equalsIgnoreCase(upperTicker))
