@@ -19,9 +19,20 @@ import java.util.List;
 public class WalletController {
 
     private final WalletService walletService;
+    private final tech.lougon.profitly.wallet.application.service.WalletEvolutionService evolutionService;
 
-    public WalletController(WalletService walletService) {
+    public WalletController(WalletService walletService,
+                            tech.lougon.profitly.wallet.application.service.WalletEvolutionService evolutionService) {
         this.walletService = walletService;
+        this.evolutionService = evolutionService;
+    }
+
+    @GetMapping("/{walletId}/evolution")
+    public ResponseEntity<List<tech.lougon.profitly.wallet.application.service.WalletEvolutionService.EvolutionPoint>> evolution(
+            @AuthenticationPrincipal String userId,
+            @PathVariable String walletId
+    ) {
+        return ResponseEntity.ok(evolutionService.evolution(walletId, userId));
     }
 
     @GetMapping
