@@ -103,6 +103,13 @@ public class FinanceController {
         return ResponseEntity.ok(RecurringExpenseResponse.from(financeService.saveRecurring(userId, req)));
     }
 
+    @PutMapping("/recurring/{id}")
+    public ResponseEntity<RecurringExpenseResponse> updateRecurring(@AuthenticationPrincipal String userId,
+                                                                    @PathVariable Long id,
+                                                                    @Valid @RequestBody RecurringExpenseRequest req) {
+        return ResponseEntity.ok(RecurringExpenseResponse.from(financeService.updateRecurring(userId, id, req)));
+    }
+
     @DeleteMapping("/recurring/{id}")
     public ResponseEntity<Void> deleteRecurring(@AuthenticationPrincipal String userId,
                                                  @PathVariable Long id) {

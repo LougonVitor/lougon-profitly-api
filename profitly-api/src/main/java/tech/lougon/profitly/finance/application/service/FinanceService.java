@@ -282,6 +282,17 @@ public class FinanceService {
         return recurringExpenseRepository.save(recurring);
     }
 
+    public RecurringExpense updateRecurring(String userId, Long id, RecurringExpenseRequest req) {
+        var existing = recurringExpenseRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Recorrente não encontrado"));
+        if (!existing.userId().equals(userId)) throw new IllegalArgumentException("Acesso negado");
+        // Edits the template only; the current period keeps the copy it was already given
+        // (editable there), and future periods inject with the new values.
+        var updated = new RecurringExpense(id, userId, req.title(), req.estimatedValue(), req.type(),
+                req.dueDay(), req.variable());
+        return recurringExpenseRepository.save(updated);
+    }
+
     @Transactional
     public void deleteRecurring(String userId, Long id) {
         var recurring = recurringExpenseRepository.findById(id)

@@ -209,6 +209,32 @@ class FinanceServiceTest {
         assertThat(expenses.findByUserId(USER)).noneMatch(e -> e.title().equals("Netflix"));
     }
 
+    @Test
+    void updatingRecurringChangesTheTemplate() {
+        RecurringExpense tmpl = service.saveRecurring(USER,
+                new RecurringExpenseRequest("Aluguel", bd(1500), ExpenseType.HOME, 5, false));
+
+        service.updateRecurring(USER, tmpl.id(),
+                new RecurringExpenseRequest("Aluguel apê", bd(1600), ExpenseType.HOME, 10, true));
+
+        RecurringExpense updated = service.getRecurring(USER).stream()
+                .filter(r -> r.id().equals(tmpl.id())).findFirst().orElseThrow();
+        assertThat(updated.title()).isEqualTo("Aluguel apê");
+        assertThat(updated.estimatedValue()).isEqualByComparingTo(bd(1600));
+        assertThat(updated.dueDay()).isEqualTo(10);
+        assertThat(updated.variable()).isTrue();
+    }
+
+    @Test
+    void updatingRecurringOfAnotherUserIsRejected() {
+        RecurringExpense tmpl = service.saveRecurring(USER,
+                new RecurringExpenseRequest("Aluguel", bd(1500), ExpenseType.HOME, 5, false));
+
+        assertThatThrownBy(() -> service.updateRecurring("attacker", tmpl.id(),
+                new RecurringExpenseRequest("Hack", bd(1), ExpenseType.HOME, null, false)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // ── ownership / IDOR ────────────────────────────────────────────────────────
 
     @Test
