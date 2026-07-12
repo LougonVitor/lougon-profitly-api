@@ -87,14 +87,15 @@ public class DividendService {
                 String key = dedupKey(position.ticker(), paymentDate, type);
                 if (seen.contains(key)) continue;
 
-                int quantityAtExDate = position.entries().stream()
+                BigDecimal quantityAtExDate = position.entries().stream()
                         .filter(entry -> !entry.date().isAfter(exDate))
-                        .mapToInt(entry -> entry.signedQuantity())
-                        .sum();
-                if (quantityAtExDate <= 0) continue;
+                        .filter(entry -> entry.quantity() != null)
+                        .map(entry -> entry.signedQuantity())
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                if (quantityAtExDate.signum() <= 0) continue;
 
                 BigDecimal totalAmount = BigDecimal.valueOf(event.rate())
-                        .multiply(BigDecimal.valueOf(quantityAtExDate));
+                        .multiply(quantityAtExDate);
 
                 var dividend = new Dividend(null, walletId, userId,
                         position.ticker(), totalAmount, paymentDate,

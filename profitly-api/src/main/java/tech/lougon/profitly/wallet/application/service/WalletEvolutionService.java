@@ -63,13 +63,13 @@ public class WalletEvolutionService {
 
             for (PositionState state : states) {
                 state.advanceTo(monthEnd);
-                if (state.quantity <= 0) continue;
+                if (state.quantity.signum() <= 0) continue;
 
-                BigDecimal cost = state.avgPrice.multiply(BigDecimal.valueOf(state.quantity));
+                BigDecimal cost = state.avgPrice.multiply(state.quantity);
                 invested = invested.add(cost);
                 BigDecimal close = state.closeAtOrBefore(monthEnd);
                 marketValue = marketValue.add(close != null
-                        ? close.multiply(BigDecimal.valueOf(state.quantity))
+                        ? close.multiply(state.quantity)
                         : cost);
             }
 
@@ -94,7 +94,7 @@ public class WalletEvolutionService {
         private final List<PositionEntry> ordered;
         private final NavigableMap<LocalDate, BigDecimal> prices;
         private int cursor = 0;
-        private int quantity = 0;
+        private BigDecimal quantity = BigDecimal.ZERO;
         private BigDecimal avgPrice = BigDecimal.ZERO;
 
         PositionState(WalletPosition position, NavigableMap<LocalDate, BigDecimal> prices) {
@@ -110,14 +110,17 @@ public class WalletEvolutionService {
                 PositionEntry e = ordered.get(cursor++);
                 if (e.quantity() == null || e.paidPrice() == null) continue;
                 if (e.typeOrBuy() == EntryType.SELL) {
-                    quantity = Math.max(quantity - e.quantity(), 0);
-                    if (quantity == 0) avgPrice = BigDecimal.ZERO;
+                    quantity = quantity.subtract(e.quantity());
+                    if (quantity.signum() <= 0) {
+                        quantity = BigDecimal.ZERO;
+                        avgPrice = BigDecimal.ZERO;
+                    }
                 } else {
-                    BigDecimal totalCost = avgPrice.multiply(BigDecimal.valueOf(quantity))
-                            .add(e.paidPrice().multiply(BigDecimal.valueOf(e.quantity())));
-                    quantity += e.quantity();
-                    avgPrice = quantity == 0 ? BigDecimal.ZERO
-                            : totalCost.divide(BigDecimal.valueOf(quantity), 4, RoundingMode.HALF_UP);
+                    BigDecimal totalCost = avgPrice.multiply(quantity)
+                            .add(e.paidPrice().multiply(e.quantity()));
+                    quantity = quantity.add(e.quantity());
+                    avgPrice = quantity.signum() == 0 ? BigDecimal.ZERO
+                            : totalCost.divide(quantity, 4, RoundingMode.HALF_UP);
                 }
             }
         }

@@ -12,7 +12,7 @@ public record WalletPositionSummaryResponse(
         String ticker,
         String logoUrl,
         String assetType,
-        Integer quantity,
+        BigDecimal quantity,
         BigDecimal averagePrice,
         BigDecimal currentPrice,
         BigDecimal totalInvested,
@@ -46,7 +46,7 @@ public record WalletPositionSummaryResponse(
     public record PositionEntryResponse(
             String id,
             LocalDate date,
-            Integer quantity,
+            BigDecimal quantity,
             BigDecimal paidPrice,
             String type,
             BigDecimal total

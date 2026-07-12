@@ -61,7 +61,9 @@ public class InfraWalletMapper {
                 entity.getId(),
                 walletPositionId,
                 entity.getDate(),
-                entity.getQuantity(),
+                entity.getQuantityDec() != null
+                        ? entity.getQuantityDec()
+                        : java.math.BigDecimal.valueOf(entity.getQuantity()),
                 entity.getPaidPrice(),
                 entity.getEntryType() != null
                         ? tech.lougon.profitly.wallet.domain.model.EntryType.valueOf(entity.getEntryType())
@@ -90,7 +92,9 @@ public class InfraWalletMapper {
         entity.setId(entry.id());
         entity.setWalletPosition(positionEntity);
         entity.setDate(entry.date());
-        entity.setQuantity(entry.quantity());
+        // legacy integer column stays NOT NULL — store the rounded value alongside the exact one
+        entity.setQuantity(entry.quantity().setScale(0, java.math.RoundingMode.HALF_UP).intValue());
+        entity.setQuantityDec(entry.quantity());
         entity.setPaidPrice(entry.paidPrice());
         entity.setEntryType(entry.typeOrBuy().name());
         entity.setCreatedAt(entry.createdAt());

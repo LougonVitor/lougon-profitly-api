@@ -8,7 +8,7 @@ public record PositionEntry(
         String id,
         String walletPositionId,
         LocalDate date,
-        Integer quantity,
+        BigDecimal quantity,
         BigDecimal paidPrice,
         EntryType type,
         Instant createdAt
@@ -18,7 +18,7 @@ public record PositionEntry(
     }
 
     /** Positive for buys, negative for sells. */
-    public int signedQuantity() {
-        return typeOrBuy() == EntryType.SELL ? -quantity : quantity;
+    public BigDecimal signedQuantity() {
+        return typeOrBuy() == EntryType.SELL ? quantity.negate() : quantity;
     }
 }

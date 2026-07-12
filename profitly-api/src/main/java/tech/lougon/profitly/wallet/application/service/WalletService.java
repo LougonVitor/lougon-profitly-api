@@ -93,10 +93,12 @@ public class WalletService {
                 .findFirst();
 
         if (type == EntryType.SELL) {
-            int held = existing.map(WalletPosition::totalQuantity).orElse(0);
-            if (request.quantity() == null || request.quantity() > held) {
+            java.math.BigDecimal held = existing.map(WalletPosition::totalQuantity)
+                    .orElse(java.math.BigDecimal.ZERO);
+            if (request.quantity() == null || request.quantity().compareTo(held) > 0) {
                 throw new IllegalArgumentException(
-                        "Venda maior que a posição atual (" + held + " unidades de " + upperTicker + ")");
+                        "Venda maior que a posição atual (" + held.stripTrailingZeros().toPlainString()
+                                + " unidades de " + upperTicker + ")");
             }
         }
 

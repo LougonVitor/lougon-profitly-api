@@ -29,7 +29,7 @@ public class WalletInvestedLookup implements InvestedLookup {
                 .filter(entry -> entry.date() != null && !entry.date().isBefore(since))
                 .filter(entry -> entry.quantity() != null && entry.paidPrice() != null)
                 .filter(entry -> entry.typeOrBuy() == tech.lougon.profitly.wallet.domain.model.EntryType.BUY)
-                .map(entry -> entry.paidPrice().multiply(BigDecimal.valueOf(entry.quantity())))
+                .map(entry -> entry.paidPrice().multiply(entry.quantity()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

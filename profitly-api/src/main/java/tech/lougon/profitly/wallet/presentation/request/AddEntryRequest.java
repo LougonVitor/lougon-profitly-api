@@ -5,7 +5,7 @@ import java.time.LocalDate;
 
 public record AddEntryRequest(
         LocalDate date,
-        Integer quantity,
+        BigDecimal quantity,
         BigDecimal paidPrice,
         String type
 ) {}

@@ -28,8 +28,13 @@ public class PositionEntryJpaEntity {
     @Column(name = "date", nullable = false)
     private LocalDate date;
 
+    /** Legacy integer column (NOT NULL); kept in sync with the rounded decimal quantity. */
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
+
+    /** Exact quantity — treasury and crypto positions are fractional. */
+    @Column(name = "quantity_dec", precision = 19, scale = 8)
+    private BigDecimal quantityDec;
 
     @Column(name = "paid_price", precision = 19, scale = 4, nullable = false)
     private BigDecimal paidPrice;

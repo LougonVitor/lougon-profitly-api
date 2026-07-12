@@ -6,7 +6,7 @@ import java.time.LocalDate;
 public record PositionEntryDTO(
         String id,
         LocalDate date,
-        Integer quantity,
+        BigDecimal quantity,
         BigDecimal paidPrice,
         String type,
         BigDecimal total

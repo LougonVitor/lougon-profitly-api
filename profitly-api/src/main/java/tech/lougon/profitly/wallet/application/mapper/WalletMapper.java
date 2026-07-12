@@ -60,7 +60,7 @@ public class WalletMapper {
         String assetType = marketData != null ? marketData.assetType() : null;
 
         BigDecimal averagePrice = position.averagePrice();
-        BigDecimal qty = BigDecimal.valueOf(position.totalQuantity());
+        BigDecimal qty = position.totalQuantity();
 
         BigDecimal totalInvested = averagePrice.multiply(qty);
         BigDecimal currentValue = currentPrice.multiply(qty);
@@ -80,7 +80,7 @@ public class WalletMapper {
                 position.ticker(),
                 logoUrl,
                 assetType,
-                position.totalQuantity(),
+                qty,
                 averagePrice,
                 currentPrice,
                 totalInvested,
@@ -93,7 +93,7 @@ public class WalletMapper {
     }
 
     private PositionEntryDTO toEntryDTO(PositionEntry entry) {
-        BigDecimal total = entry.paidPrice().multiply(BigDecimal.valueOf(entry.quantity()));
+        BigDecimal total = entry.paidPrice().multiply(entry.quantity());
         return new PositionEntryDTO(entry.id(), entry.date(), entry.quantity(), entry.paidPrice(),
                 entry.typeOrBuy().name(), total);
     }
