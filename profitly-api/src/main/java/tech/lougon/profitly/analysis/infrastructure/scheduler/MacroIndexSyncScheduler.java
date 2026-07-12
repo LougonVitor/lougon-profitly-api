@@ -36,6 +36,9 @@ public class MacroIndexSyncScheduler {
     private static final List<String> SLUGS = List.of("cdi", "selic", "ipca");
     private static final int BACKFILL_LIMIT = 10000;
     private static final int INCREMENTAL_LIMIT = 60;
+    // brapi defaults startDate to "12 months ago" when omitted — an explicit date this old,
+    // combined with sortOrder=desc, is what actually gets the full available history.
+    private static final String BACKFILL_START_DATE = "1980-01-01";
 
     private final BrapiMacroClient client;
     private final JpaMacroIndexValueRepository repository;
@@ -68,7 +71,7 @@ public class MacroIndexSyncScheduler {
         int saved = 0;
         if (!backfill.isEmpty()) {
             log.info("Macro index backfill: {}", backfill);
-            saved += syncBatch(String.join(",", backfill), null, BACKFILL_LIMIT);
+            saved += syncBatch(String.join(",", backfill), BACKFILL_START_DATE, BACKFILL_LIMIT);
         }
         if (!incremental.isEmpty()) {
             String startDate = LocalDate.now().minusDays(30).toString();

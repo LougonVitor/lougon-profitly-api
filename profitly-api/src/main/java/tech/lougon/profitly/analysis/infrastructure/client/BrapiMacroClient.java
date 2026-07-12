@@ -25,20 +25,21 @@ public class BrapiMacroClient {
     }
 
     /**
-     * {@code startDate} omitted returns the most recent observations first (desc), which is
-     * what a one-shot backfill needs since brapi caps each series at {@code limit} rows —
-     * requesting from the earliest date would truncate before reaching today.
+     * {@code startDate} is required, not optional: brapi defaults it to "12 months ago"
+     * when omitted, which silently truncates a backfill to the last year. sortOrder=desc
+     * combined with an old startDate returns the most recent {@code limit} observations
+     * within that window — the caller must pass a startDate old enough (e.g. the series'
+     * documented start) that "most recent {@code limit}" still reaches today.
      */
     public List<BrapiMacroResponse.SeriesResult> fetchSeries(String symbols, String startDate, int limit) {
         try {
             BrapiMacroResponse response = webClient.get()
-                    .uri(u -> {
-                        var b = u.path("/api/v2/macro")
-                                .queryParam("symbols", symbols)
-                                .queryParam("limit", limit);
-                        if (startDate != null) b = b.queryParam("startDate", startDate);
-                        return b.build();
-                    })
+                    .uri(u -> u.path("/api/v2/macro")
+                            .queryParam("symbols", symbols)
+                            .queryParam("startDate", startDate)
+                            .queryParam("sortOrder", "desc")
+                            .queryParam("limit", limit)
+                            .build())
                     .retrieve()
                     .bodyToMono(BrapiMacroResponse.class)
                     .block();
