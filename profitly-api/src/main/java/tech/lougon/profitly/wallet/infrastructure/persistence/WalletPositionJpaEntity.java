@@ -28,6 +28,9 @@ public class WalletPositionJpaEntity {
     @Column(name = "ticker", nullable = false)
     private String ticker;
 
+    @Embedded
+    private FixedIncomeDetailsEmbeddable fixedIncomeDetails;
+
     @OneToMany(mappedBy = "walletPosition", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<PositionEntryJpaEntity> entries = new ArrayList<>();
 

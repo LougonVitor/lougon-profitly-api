@@ -1,9 +1,13 @@
 package tech.lougon.profitly.wallet.infrastructure.persistence.mapper;
 
 import org.springframework.stereotype.Component;
+import tech.lougon.profitly.wallet.domain.model.FixedIncomeDetails;
+import tech.lougon.profitly.wallet.domain.model.FixedIncomeInstrumentType;
+import tech.lougon.profitly.wallet.domain.model.Indexer;
 import tech.lougon.profitly.wallet.domain.model.PositionEntry;
 import tech.lougon.profitly.wallet.domain.model.Wallet;
 import tech.lougon.profitly.wallet.domain.model.WalletPosition;
+import tech.lougon.profitly.wallet.infrastructure.persistence.FixedIncomeDetailsEmbeddable;
 import tech.lougon.profitly.wallet.infrastructure.persistence.PositionEntryJpaEntity;
 import tech.lougon.profitly.wallet.infrastructure.persistence.WalletJpaEntity;
 import tech.lougon.profitly.wallet.infrastructure.persistence.WalletPositionJpaEntity;
@@ -52,7 +56,32 @@ public class InfraWalletMapper {
                 entity.getWallet().getId(),
                 entity.getTicker(),
                 entries,
-                entity.getCreatedAt()
+                entity.getCreatedAt(),
+                toFixedIncomeDomain(entity.getFixedIncomeDetails())
+        );
+    }
+
+    private FixedIncomeDetails toFixedIncomeDomain(FixedIncomeDetailsEmbeddable e) {
+        if (e == null) return null;
+        return new FixedIncomeDetails(
+                e.getIssuer(),
+                e.getInstrumentType() != null ? FixedIncomeInstrumentType.valueOf(e.getInstrumentType()) : null,
+                e.getIndexer() != null ? Indexer.valueOf(e.getIndexer()) : null,
+                e.getRatePercent(),
+                Boolean.TRUE.equals(e.getDailyLiquidity()),
+                e.getMaturityDate()
+        );
+    }
+
+    private FixedIncomeDetailsEmbeddable toFixedIncomeEntity(FixedIncomeDetails d) {
+        if (d == null) return null;
+        return new FixedIncomeDetailsEmbeddable(
+                d.issuer(),
+                d.instrumentType() != null ? d.instrumentType().name() : null,
+                d.indexer() != null ? d.indexer().name() : null,
+                d.ratePercent(),
+                d.dailyLiquidity(),
+                d.maturityDate()
         );
     }
 
@@ -78,6 +107,7 @@ public class InfraWalletMapper {
         entity.setWallet(walletEntity);
         entity.setTicker(position.ticker());
         entity.setCreatedAt(position.createdAt());
+        entity.setFixedIncomeDetails(toFixedIncomeEntity(position.fixedIncomeDetails()));
 
         List<PositionEntryJpaEntity> entryEntities = position.entries().stream()
                 .map(e -> toEntryEntity(e, entity))

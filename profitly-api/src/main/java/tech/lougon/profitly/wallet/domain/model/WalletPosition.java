@@ -11,8 +11,24 @@ public record WalletPosition(
         String walletId,
         String ticker,
         List<PositionEntry> entries,
-        Instant createdAt
+        Instant createdAt,
+        FixedIncomeDetails fixedIncomeDetails
 ) {
+    public boolean isFixedIncome() {
+        return fixedIncomeDetails != null;
+    }
+
+    /**
+     * Rebuilds this position with a new entry list, preserving every other field —
+     * in particular {@code fixedIncomeDetails}. Use this instead of the positional
+     * constructor when only entries change: the constructor is easy to call with a
+     * stale/incomplete field list, which would silently drop renda-fixa metadata on
+     * the next save (WalletRepositoryImpl always persists the whole wallet graph).
+     */
+    public WalletPosition withEntries(List<PositionEntry> newEntries) {
+        return new WalletPosition(id, walletId, ticker, newEntries, createdAt, fixedIncomeDetails);
+    }
+
     public BigDecimal totalQuantity() {
         return entries.stream()
                 .filter(e -> e.quantity() != null)

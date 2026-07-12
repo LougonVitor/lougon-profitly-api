@@ -92,6 +92,11 @@ public class WalletService {
                 .filter(p -> p.ticker().equalsIgnoreCase(upperTicker))
                 .findFirst();
 
+        if (existing.isPresent() && existing.get().isFixedIncome()) {
+            throw new IllegalArgumentException(
+                    "Posições de renda fixa aceitam aportes/resgates apenas pelos endpoints dedicados");
+        }
+
         if (type == EntryType.SELL) {
             java.math.BigDecimal held = existing.map(WalletPosition::totalQuantity)
                     .orElse(java.math.BigDecimal.ZERO);
@@ -110,9 +115,7 @@ public class WalletService {
             );
             List<PositionEntry> updatedEntries = new ArrayList<>(position.entries());
             updatedEntries.add(newEntry);
-            WalletPosition updatedPosition = new WalletPosition(
-                    position.id(), position.walletId(), position.ticker(), updatedEntries, position.createdAt()
-            );
+            WalletPosition updatedPosition = position.withEntries(updatedEntries);
             updatedPositions = wallet.positions().stream()
                     .map(p -> p.id().equals(position.id()) ? updatedPosition : p)
                     .toList();
@@ -121,7 +124,7 @@ public class WalletService {
                     null, null, request.date(), request.quantity(), request.paidPrice(), type, Instant.now()
             );
             WalletPosition newPosition = new WalletPosition(
-                    null, walletId, upperTicker, List.of(newEntry), Instant.now()
+                    null, walletId, upperTicker, List.of(newEntry), Instant.now(), null
             );
             updatedPositions = new ArrayList<>(wallet.positions());
             ((ArrayList<WalletPosition>) updatedPositions).add(newPosition);
@@ -134,7 +137,18 @@ public class WalletService {
 
     public WalletSummaryDTO updateEntry(String walletId, String entryId, UpdateEntryRequest request, String userId) {
         Wallet wallet = requireOwned(walletId, userId);
-        requireEntry(wallet, entryId);
+        WalletPosition owningPosition = requireEntry(wallet, entryId);
+
+        if (owningPosition.isFixedIncome()) {
+            PositionEntry current = owningPosition.entries().stream()
+                    .filter(e -> e.id().equals(entryId)).findFirst().orElseThrow();
+            boolean changesPaidPrice = request.paidPrice() != null && current.paidPrice().compareTo(request.paidPrice()) != 0;
+            boolean changesType = request.type() != null && !parseType(request.type()).equals(current.typeOrBuy());
+            if (changesPaidPrice || changesType) {
+                throw new IllegalArgumentException(
+                        "Lançamentos de renda fixa aceitam apenas edição de data/valor — use resgatar para encerrar a posição");
+            }
+        }
 
         List<WalletPosition> updatedPositions = wallet.positions().stream()
                 .map(position -> {
@@ -144,7 +158,7 @@ public class WalletService {
                                             request.type() != null ? parseType(request.type()) : e.typeOrBuy(), e.createdAt())
                                     : e)
                             .toList();
-                    return new WalletPosition(position.id(), position.walletId(), position.ticker(), updatedEntries, position.createdAt());
+                    return position.withEntries(updatedEntries);
                 })
                 .toList();
 
@@ -162,7 +176,7 @@ public class WalletService {
                     List<PositionEntry> remaining = position.entries().stream()
                             .filter(e -> !e.id().equals(entryId))
                             .toList();
-                    return new WalletPosition(position.id(), position.walletId(), position.ticker(), remaining, position.createdAt());
+                    return position.withEntries(remaining);
                 })
                 .filter(position -> !position.entries().isEmpty())
                 .toList();
@@ -193,13 +207,12 @@ public class WalletService {
         }
     }
 
-    private void requireEntry(Wallet wallet, String entryId) {
-        boolean exists = wallet.positions().stream()
-                .flatMap(p -> p.entries().stream())
-                .anyMatch(e -> e.id().equals(entryId));
-        if (!exists) {
-            throw new NoSuchElementException("Entry not found: " + entryId);
-        }
+    /** Returns the position owning {@code entryId}, or throws if no entry with that id exists in the wallet. */
+    private WalletPosition requireEntry(Wallet wallet, String entryId) {
+        return wallet.positions().stream()
+                .filter(p -> p.entries().stream().anyMatch(e -> e.id().equals(entryId)))
+                .findFirst()
+                .orElseThrow(() -> new NoSuchElementException("Entry not found: " + entryId));
     }
 
     private Map<String, StockMarketData> resolveMarketData(Wallet wallet) {
