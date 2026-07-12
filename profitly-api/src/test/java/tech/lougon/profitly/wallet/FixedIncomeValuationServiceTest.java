@@ -48,6 +48,20 @@ class FixedIncomeValuationServiceTest {
     }
 
     @Test
+    void cdiCarriesTheLastKnownRateForwardOverUnpublishedDaysLikeWeekends() {
+        LocalDate start = LocalDate.of(2026, 1, 1);
+        macroIndexLookup.add("cdi", LocalDate.of(2026, 1, 2), "0.05"); // e.g. Friday
+        // Jan 3rd/4th have no observation — a weekend, or "today" before the rate is out yet
+
+        BigDecimal factor = service.factorAt(Indexer.CDI, bd(100), start, LocalDate.of(2026, 1, 4), null);
+
+        // the Jan-2 rate is carried forward and applied on the 3rd and 4th too: 3 days total
+        BigDecimal dailyStep = BigDecimal.ONE.add(bd(0.0005));
+        BigDecimal expected = dailyStep.multiply(dailyStep).multiply(dailyStep);
+        assertThat(factor.doubleValue()).isCloseTo(expected.doubleValue(), within(1e-9));
+    }
+
+    @Test
     void cdiDoesNotAccrueOnTheApplicationDayItself() {
         LocalDate start = LocalDate.of(2026, 1, 1);
         macroIndexLookup.add("cdi", start, "0.05"); // same-day observation must be ignored

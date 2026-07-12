@@ -18,10 +18,11 @@ import java.util.TreeMap;
  * (average cost, P/L, evolution) can treat it exactly like a ticker's currentPrice.
  *
  * <p>These formulas are a deliberate MVP approximation, not the official ANBIMA/NTN-B
- * day-count convention (252 úteis): CDI/Selic compound over whatever days actually have a
- * published observation (weekends/holidays/publication lag are silently skipped, never
- * extrapolated past the last available value); Prefixado and the IPCA+ spread compound
- * over 365 calendar days.
+ * day-count convention (252 úteis): CDI/Selic accrue every calendar day, carrying the last
+ * known published rate forward over weekends/holidays/publication lag (the same convention
+ * banks use — the last business day's DI rate is considered to also apply to the
+ * non-business days that follow it, and to "today" before the new rate is published);
+ * Prefixado and the IPCA+ spread compound over 365 calendar days.
  */
 @Service
 public class FixedIncomeValuationService {
@@ -29,6 +30,8 @@ public class FixedIncomeValuationService {
     private static final int SCALE = 12;
     private static final BigDecimal ONE = BigDecimal.ONE;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    /** Lookback window so a gap right after {@code start} (e.g. a weekend) still finds a prior rate to carry forward. */
+    private static final int LOOKBACK_DAYS = 10;
 
     private final MacroIndexLookup macroIndexLookup;
 
@@ -60,28 +63,44 @@ public class FixedIncomeValuationService {
         return series;
     }
 
-    /** CDI (percentPerDay, already the daily rate — just apply ratePercent% of it). */
+    /** CDI (percentPerDay, already the daily rate — just apply ratePercent% of it), carried forward over gaps. */
     private BigDecimal dailyIndexFactor(String slug, BigDecimal ratePercent, LocalDate start, LocalDate end) {
         BigDecimal multiplier = ratePercent.divide(HUNDRED, SCALE, RoundingMode.HALF_UP);
+        NavigableMap<LocalDate, BigDecimal> observed = observationMap(slug, start, end);
         BigDecimal factor = ONE;
-        for (var point : macroIndexLookup.findObservations(slug, start.plusDays(1), end)) {
-            if (point.value() == null) continue;
-            BigDecimal dailyFraction = point.value().divide(HUNDRED, SCALE, RoundingMode.HALF_UP);
+        for (LocalDate day = start.plusDays(1); !day.isAfter(end); day = day.plusDays(1)) {
+            var floor = observed.floorEntry(day);
+            if (floor == null) continue;
+            BigDecimal dailyFraction = floor.getValue().divide(HUNDRED, SCALE, RoundingMode.HALF_UP);
             factor = round(factor.multiply(ONE.add(dailyFraction.multiply(multiplier))));
         }
         return factor;
     }
 
-    /** Selic is published as an annual rate (percentPerYear) — convert to its daily-compounding equivalent first. */
+    /**
+     * Selic is published as an annual rate (percentPerYear) — convert to its daily-compounding
+     * equivalent first. Carries the last known rate forward over gaps, same as CDI.
+     */
     private BigDecimal selicFactor(BigDecimal ratePercent, LocalDate start, LocalDate end) {
         double multiplier = ratePercent.doubleValue() / 100.0;
+        NavigableMap<LocalDate, BigDecimal> observed = observationMap("selic", start, end);
         BigDecimal factor = ONE;
-        for (var point : macroIndexLookup.findObservations("selic", start.plusDays(1), end)) {
-            if (point.value() == null) continue;
-            double dailyRate = Math.pow(1 + point.value().doubleValue() / 100.0, 1.0 / 252.0) - 1.0;
+        for (LocalDate day = start.plusDays(1); !day.isAfter(end); day = day.plusDays(1)) {
+            var floor = observed.floorEntry(day);
+            if (floor == null) continue;
+            double dailyRate = Math.pow(1 + floor.getValue().doubleValue() / 100.0, 1.0 / 252.0) - 1.0;
             factor = round(factor.multiply(ONE.add(BigDecimal.valueOf(dailyRate * multiplier))));
         }
         return factor;
+    }
+
+    /** Observations in {@code [start, end]}, looked back a bit further so a gap right after {@code start} still resolves. */
+    private NavigableMap<LocalDate, BigDecimal> observationMap(String slug, LocalDate start, LocalDate end) {
+        NavigableMap<LocalDate, BigDecimal> map = new TreeMap<>();
+        for (var point : macroIndexLookup.findObservations(slug, start.minusDays(LOOKBACK_DAYS), end)) {
+            if (point.value() != null) map.put(point.date(), point.value());
+        }
+        return map;
     }
 
     /**
