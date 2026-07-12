@@ -5,9 +5,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import tech.lougon.profitly.wallet.application.service.FixedIncomeService;
 import tech.lougon.profitly.wallet.application.service.WalletService;
 import tech.lougon.profitly.wallet.presentation.request.AddEntryRequest;
+import tech.lougon.profitly.wallet.presentation.request.AddFixedIncomeEntryRequest;
 import tech.lougon.profitly.wallet.presentation.request.CreateWalletRequest;
+import tech.lougon.profitly.wallet.presentation.request.RedeemFixedIncomeRequest;
 import tech.lougon.profitly.wallet.presentation.request.UpdateEntryRequest;
 import tech.lougon.profitly.wallet.presentation.response.WalletSummaryResponse;
 
@@ -19,11 +22,14 @@ import java.util.List;
 public class WalletController {
 
     private final WalletService walletService;
+    private final FixedIncomeService fixedIncomeService;
     private final tech.lougon.profitly.wallet.application.service.WalletEvolutionService evolutionService;
 
     public WalletController(WalletService walletService,
+                            FixedIncomeService fixedIncomeService,
                             tech.lougon.profitly.wallet.application.service.WalletEvolutionService evolutionService) {
         this.walletService = walletService;
+        this.fixedIncomeService = fixedIncomeService;
         this.evolutionService = evolutionService;
     }
 
@@ -112,5 +118,25 @@ public class WalletController {
             @PathVariable String ticker
     ) {
         return ResponseEntity.ok(WalletSummaryResponse.from(walletService.deletePosition(walletId, ticker, userId)));
+    }
+
+    @PostMapping("/{walletId}/fixed-income")
+    public ResponseEntity<WalletSummaryResponse> addFixedIncomeEntry(
+            @AuthenticationPrincipal String userId,
+            @PathVariable String walletId,
+            @RequestBody @Valid AddFixedIncomeEntryRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(WalletSummaryResponse.from(fixedIncomeService.createPosition(walletId, request, userId)));
+    }
+
+    @PostMapping("/{walletId}/positions/{ticker}/redeem")
+    public ResponseEntity<WalletSummaryResponse> redeemFixedIncome(
+            @AuthenticationPrincipal String userId,
+            @PathVariable String walletId,
+            @PathVariable String ticker,
+            @RequestBody @Valid RedeemFixedIncomeRequest request
+    ) {
+        return ResponseEntity.ok(WalletSummaryResponse.from(fixedIncomeService.redeem(walletId, ticker, request, userId)));
     }
 }

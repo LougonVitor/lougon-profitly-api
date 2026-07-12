@@ -32,13 +32,16 @@ public class WalletEvolutionService {
     private final WalletService walletService;
     private final JpaPricePointRepository pricePointRepository;
     private final tech.lougon.profitly.analysis.infrastructure.persistence.JpaTreasuryBondHistoryRepository treasuryHistoryRepository;
+    private final FixedIncomeValuationService fixedIncomeValuationService;
 
     public WalletEvolutionService(WalletService walletService,
                                   JpaPricePointRepository pricePointRepository,
-                                  tech.lougon.profitly.analysis.infrastructure.persistence.JpaTreasuryBondHistoryRepository treasuryHistoryRepository) {
+                                  tech.lougon.profitly.analysis.infrastructure.persistence.JpaTreasuryBondHistoryRepository treasuryHistoryRepository,
+                                  FixedIncomeValuationService fixedIncomeValuationService) {
         this.walletService = walletService;
         this.pricePointRepository = pricePointRepository;
         this.treasuryHistoryRepository = treasuryHistoryRepository;
+        this.fixedIncomeValuationService = fixedIncomeValuationService;
     }
 
     public List<EvolutionPoint> evolution(String walletId, String userId) {
@@ -54,13 +57,20 @@ public class WalletEvolutionService {
         YearMonth first = YearMonth.from(firstDate);
         YearMonth current = YearMonth.now();
 
+        List<YearMonth> months = new ArrayList<>();
+        for (YearMonth ym = first; !ym.isAfter(current); ym = ym.plusMonths(1)) months.add(ym);
+        List<LocalDate> monthEnds = months.stream()
+                .map(ym -> ym.equals(current) ? LocalDate.now() : ym.atEndOfMonth())
+                .toList();
+
         List<PositionState> states = wallet.positions().stream()
-                .map(p -> new PositionState(p, loadPrices(p.ticker(), firstDate)))
+                .map(p -> new PositionState(p, loadPrices(p, firstDate, monthEnds)))
                 .toList();
 
         List<EvolutionPoint> points = new ArrayList<>();
-        for (YearMonth ym = first; !ym.isAfter(current); ym = ym.plusMonths(1)) {
-            LocalDate monthEnd = ym.equals(current) ? LocalDate.now() : ym.atEndOfMonth();
+        for (int i = 0; i < months.size(); i++) {
+            YearMonth ym = months.get(i);
+            LocalDate monthEnd = monthEnds.get(i);
             BigDecimal invested = BigDecimal.ZERO;
             BigDecimal marketValue = BigDecimal.ZERO;
 
@@ -83,7 +93,14 @@ public class WalletEvolutionService {
         return points;
     }
 
-    private NavigableMap<LocalDate, BigDecimal> loadPrices(String symbol, LocalDate from) {
+    private NavigableMap<LocalDate, BigDecimal> loadPrices(WalletPosition position, LocalDate from, List<LocalDate> sampleDates) {
+        if (position.isFixedIncome()) {
+            var details = position.fixedIncomeDetails();
+            return fixedIncomeValuationService.factorSeries(
+                    details.indexer(), details.ratePercent(), from, sampleDates, details.maturityDate());
+        }
+
+        String symbol = position.ticker();
         NavigableMap<LocalDate, BigDecimal> prices = new TreeMap<>();
         // Treasury history lives in treasury_bond_history, not price_points; the
         // sell price is the mark-to-market value of a bond already held.

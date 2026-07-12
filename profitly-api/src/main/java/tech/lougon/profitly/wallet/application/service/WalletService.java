@@ -14,6 +14,7 @@ import tech.lougon.profitly.wallet.presentation.request.AddEntryRequest;
 import tech.lougon.profitly.wallet.presentation.request.UpdateEntryRequest;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,15 +29,18 @@ public class WalletService {
     private final StockPriceLookup stockPriceLookup;
     private final WalletMapper walletMapper;
     private final tech.lougon.profitly.wallet.domain.repository.DividendRepository dividendRepository;
+    private final FixedIncomeValuationService fixedIncomeValuationService;
 
     public WalletService(WalletRepository walletRepository,
                          StockPriceLookup stockPriceLookup,
                          WalletMapper walletMapper,
-                         tech.lougon.profitly.wallet.domain.repository.DividendRepository dividendRepository) {
+                         tech.lougon.profitly.wallet.domain.repository.DividendRepository dividendRepository,
+                         FixedIncomeValuationService fixedIncomeValuationService) {
         this.walletRepository = walletRepository;
         this.stockPriceLookup = stockPriceLookup;
         this.walletMapper = walletMapper;
         this.dividendRepository = dividendRepository;
+        this.fixedIncomeValuationService = fixedIncomeValuationService;
     }
 
     public List<WalletSummaryDTO> findAll(String userId) {
@@ -215,12 +219,30 @@ public class WalletService {
                 .orElseThrow(() -> new NoSuchElementException("Entry not found: " + entryId));
     }
 
-    private Map<String, StockMarketData> resolveMarketData(Wallet wallet) {
+    /** Package-visible so {@link FixedIncomeService} can build the same response shape after its own saves. */
+    Map<String, StockMarketData> resolveMarketData(Wallet wallet) {
         return wallet.positions().stream()
                 .collect(Collectors.toMap(
                         WalletPosition::ticker,
-                        position -> stockPriceLookup.findMarketData(position.ticker()).orElse(null),
+                        this::resolvePositionMarketData,
                         (a, b) -> a
                 ));
+    }
+
+    private StockMarketData resolvePositionMarketData(WalletPosition position) {
+        if (position.isFixedIncome()) return fixedIncomeMarketData(position);
+        return stockPriceLookup.findMarketData(position.ticker()).orElse(null);
+    }
+
+    /** currentPrice here is the accrued factor (a "cota" born at 1.0) — see FixedIncomeValuationService. */
+    private StockMarketData fixedIncomeMarketData(WalletPosition position) {
+        var details = position.fixedIncomeDetails();
+        LocalDate start = position.entries().stream()
+                .map(PositionEntry::date)
+                .min(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+        java.math.BigDecimal factor = fixedIncomeValuationService.factorAt(
+                details.indexer(), details.ratePercent(), start, LocalDate.now(), details.maturityDate());
+        return new StockMarketData(factor, null, "fixed-income", details.displayName());
     }
 }

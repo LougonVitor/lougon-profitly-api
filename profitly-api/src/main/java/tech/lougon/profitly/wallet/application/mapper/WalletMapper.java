@@ -76,6 +76,7 @@ public class WalletMapper {
                 .map(this::toEntryDTO)
                 .toList();
 
+        var fi = position.fixedIncomeDetails();
         return new WalletPositionSummaryDTO(
                 position.id(),
                 position.ticker(),
@@ -90,7 +91,13 @@ public class WalletMapper {
                 profitOrLoss,
                 profitOrLossPercent,
                 position.realizedProfitOrLoss(),
-                entries
+                entries,
+                fi != null ? fi.issuer() : null,
+                fi != null && fi.instrumentType() != null ? fi.instrumentType().name() : null,
+                fi != null && fi.indexer() != null ? fi.indexer().name() : null,
+                fi != null ? fi.ratePercent() : null,
+                fi != null ? fi.dailyLiquidity() : null,
+                fi != null ? fi.maturityDate() : null
         );
     }
 

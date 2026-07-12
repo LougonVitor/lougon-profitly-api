@@ -21,7 +21,13 @@ public record WalletPositionSummaryResponse(
         BigDecimal profitOrLoss,
         BigDecimal profitOrLossPercent,
         BigDecimal realizedProfitOrLoss,
-        List<PositionEntryResponse> entries
+        List<PositionEntryResponse> entries,
+        String issuer,
+        String instrumentType,
+        String indexer,
+        BigDecimal ratePercent,
+        Boolean dailyLiquidity,
+        LocalDate maturityDate
 ) {
     public static WalletPositionSummaryResponse from(WalletPositionSummaryDTO dto) {
         List<PositionEntryResponse> entries = dto.entries().stream()
@@ -41,7 +47,13 @@ public record WalletPositionSummaryResponse(
                 dto.profitOrLoss(),
                 dto.profitOrLossPercent(),
                 dto.realizedProfitOrLoss(),
-                entries
+                entries,
+                dto.issuer(),
+                dto.instrumentType(),
+                dto.indexer(),
+                dto.ratePercent(),
+                dto.dailyLiquidity(),
+                dto.maturityDate()
         );
     }
 

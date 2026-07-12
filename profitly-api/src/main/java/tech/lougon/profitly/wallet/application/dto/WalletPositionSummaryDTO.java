@@ -1,6 +1,7 @@
 package tech.lougon.profitly.wallet.application.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public record WalletPositionSummaryDTO(
@@ -17,5 +18,11 @@ public record WalletPositionSummaryDTO(
         BigDecimal profitOrLoss,
         BigDecimal profitOrLossPercent,
         BigDecimal realizedProfitOrLoss,
-        List<PositionEntryDTO> entries
+        List<PositionEntryDTO> entries,
+        String issuer,
+        String instrumentType,
+        String indexer,
+        BigDecimal ratePercent,
+        Boolean dailyLiquidity,
+        LocalDate maturityDate
 ) {}
