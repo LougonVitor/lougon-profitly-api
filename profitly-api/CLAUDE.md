@@ -4,7 +4,7 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 
 ## Regra inegociável
 
-**NUNCA chamar o brapi durante requisição de usuário.** Todo dado é servido do banco. O brapi só é acessado por schedulers (crons noturnos 19h–20h BRT). Startup syncs existem mas ficam desligados por padrão (`profitly.sync.on-startup=false`) para economizar requisições do plano PRO.
+**NUNCA chamar o brapi durante requisição de usuário.** Todo dado é servido do banco. O brapi só é acessado por schedulers (cron único diário às 18h00 BRT, `DailyMarketSyncScheduler`, que dispara em sequência tickers → FIIs → fundos → tesouro → cripto → ações → carteira → Ibovespa → notícias — um trigger só evita que os jobs independentes disputem o limite de requisições do brapi). Startup syncs existem mas ficam desligados por padrão (`profitly.sync.on-startup=false`) para economizar requisições do plano PRO.
 
 ## Arquitetura de dados
 
@@ -39,22 +39,22 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 ## Cripto
 
 - Histórico diário das moedas vai para `price_points` (mesma tabela das ações): BRL sob o símbolo da moeda, USD sob `{coin}:USD` — o gráfico genérico `/api/analysis/{symbol}/history` serve ambos sem código novo (toggle BRL/USD no frontend). A série BRL do brapi é sintética (USD × câmbio único do momento da chamada); a USD é a autêntica
-- `CryptoSyncScheduler` (19h50 BRT): catálogo → cotações (lotes de 20) → histórico BRL e USD (backfill `range=max` em lotes de 5 para moedas sem histórico; incremental `3mo` em lotes de 20, inserindo só barras novas) → Fear & Greed
+- `CryptoSyncScheduler` (disparado às 18h00 BRT pelo `DailyMarketSyncScheduler`): catálogo → cotações (lotes de 20) → histórico BRL e USD (backfill `range=max` em lotes de 5 para moedas sem histórico; incremental `3mo` em lotes de 20, inserindo só barras novas) → Fear & Greed
 - `/api/crypto/analysis/{coin}` (`CryptoAnalysisService`): retornos por período, volatilidade anualizada (√365, cripto negocia todo dia), max drawdown 1a, ATH, faixa 52s, SMA50/200, ranking por volume — tudo calculado do banco
 - **Fear & Greed** (`crypto_fear_greed`, exibido só na página do BTC): api.alternative.me/fng, sem chave, backfill `limit=0` (histórico completo, >256KB — client precisa de buffer maior), incremental `limit=30`; valores numéricos chegam como string
 - Gráfico de cripto NÃO tem "vs IBOV" (prop `showBenchmark={false}` no `PriceChartSection`)
-- `profitly.sync.crypto-on-startup=false` — ligar só durante dev ativo da tela de cripto (cron das 19h50 mantém os dados)
+- `profitly.sync.crypto-on-startup=false` — ligar só durante dev ativo da tela de cripto (cron das 18h mantém os dados)
 
 ## Tesouro Direto
 
 - Símbolos são minúsculos (`tesouro-prefixado-01012029`) — o `/api/analysis/{symbol}` genérico tenta o símbolo como veio e só depois uppercase (não voltar a fazer uppercase incondicional)
-- `TreasurySyncScheduler` (19h45 BRT): `/api/v2/treasury/list` (1 chamada traz os ~60 títulos) → salva `treasury_bonds` + upsert em `tickers` → histórico em `treasury_bond_history` via `/treasury/indicators/history` em lotes de 20 símbolos (backfill desde 2020 quando o título não tem linhas — brapi só tem dados desde ~2022-02; incremental 3 meses nos demais)
+- `TreasurySyncScheduler` (disparado às 18h00 BRT pelo `DailyMarketSyncScheduler`): `/api/v2/treasury/list` (1 chamada traz os ~60 títulos) → salva `treasury_bonds` + upsert em `tickers` → histórico em `treasury_bond_history` via `/treasury/indicators/history` em lotes de 20 símbolos (backfill desde 2020 quando o título não tem linhas — brapi só tem dados desde ~2022-02; incremental 3 meses nos demais)
 - Resposta do history é ANINHADA: `results[].history[]` com `baseDate` (não é lista plana); `/treasury/indicators` usa root `results` (não `treasuries`), mesmo shape do list
 - **rateInfo importa**: para Tesouro Selic `buyRate`/`sellRate` são SPREAD sobre a Selic (ex.: 0,08), não a rentabilidade total — exibir "SELIC + x%"; prefixado é taxa nominal, IPCA+ é taxa real. `rate_type`/`rate_unit`/`rate_description` ficam em `treasury_bonds`
 - **Renda+/Educa+ NÃO usam o ano do vencimento no nome oficial**: o `maturityDate` da brapi é a ÚLTIMA parcela; o nome usa o ano em que a renda começa (Renda+ = vencimento − 19, são 240 parcelas mensais; Educa+ = vencimento − 4, são 60). Ex.: vencimento 2084 = "Renda+ 2065". Cálculo em `incomeYearsBeforeMaturity` (scheduler) e `treasuryIncomeYears` (frontend)
 - `/api/treasury/analysis/{symbol}` (`TreasuryAnalysisService`): variação da taxa por período (p.p.), faixa 52s da taxa, extremos históricos, retornos de marcação a mercado (sellPrice), volatilidade anualizada √252 (pregões), drawdown 1a, ranking por taxa dentro do indexador, títulos irmãos — tudo do banco
 - Tela segue o layout da de cripto: barra de 5 métricas, gráfico com toggle de métrica + ranges 3M–Máx, grids de variação/retornos, cards de risco/extremos, tabela clicável de títulos do mesmo indexador
-- `profitly.sync.treasury-on-startup=false` — ligar só durante dev ativo da tela de tesouro (cron das 19h45 mantém os dados)
+- `profitly.sync.treasury-on-startup=false` — ligar só durante dev ativo da tela de tesouro (cron das 18h mantém os dados)
 
 ## Fundos listados (FIAGRO / FI-Infra / FIDC / FIP)
 
@@ -64,14 +64,14 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - `/funds/nav/history` só tem dados de fundos-FIF (JURO11 diário); fiagro/fip não têm — a tela degrada (seções somem). Resposta é lista PLANA (`history[]`, um item por símbolo+data) com paginação, diferente do tesouro
 - Histórico de PREÇO de mercado vem de `/api/v2/stocks/historical` (funciona para qualquer ticker de fundo) → vai para `price_points` → gráfico genérico `/api/analysis/{symbol}/history` serve sem código novo
 - Documentos regulatórios (profile, portfolio, fiagro/fidc reports+portfolio, fip reports) ficam como raw JSON em `fund_documents` (symbol + doc_type + reference_date); shapes variam por tipo — DTO genérico `BrapiFundRawListResponse` com `Map<String,Object>` e `@JsonAlias({"funds","profiles","reports"})`
-- `FundSyncScheduler` (19h40 BRT): list → seed tickers → indicators (lotes 20) → NAV history (backfill 2020/incremental 3m) → dividendos (backfill total/incremental 3m) → DY calculado → documentos → preço de mercado (backfill max/incremental 3mo) → variação diária do ticker (últimos 2 fechamentos, fallback NAV)
+- `FundSyncScheduler` (disparado às 18h00 BRT pelo `DailyMarketSyncScheduler`): list → seed tickers → indicators (lotes 20) → NAV history (backfill 2020/incremental 3m) → dividendos (backfill total/incremental 3m) → DY calculado → documentos → preço de mercado (backfill max/incremental 3mo) → variação diária do ticker (últimos 2 fechamentos, fallback NAV)
 - `/api/funds/analysis/{symbol}` (`FundAnalysisService`): retornos de preço E de NAV por período, vol √252 de ambos, drawdown, faixa 52s, extremos de NAV, evolução patrimônio/cotistas, ranking por DY dentro do tipo, fundos irmãos, dividendos recentes, documentos raw desserializados por tipo — tudo do banco
 - Tela (`FundAnalysisPage` no `TickerAnalysis.tsx`): barra de 5 métricas, gráfico, faixa 52s, grids de retorno preço/NAV, cards risco/patrimônio, composição da carteira por tipo (fiagro=allocations, fidc=sectors+cedentes, genérico=summary, fip=capital), perfil de cotistas, tabela de rendimentos, comparação clicável por tipo. Datas dentro de raw docs vêm como ISO completo — `docDate()` corta em 10 chars
-- `profitly.sync.funds-on-startup=false` — ligar só durante dev ativo da tela de fundos (cron das 19h40 mantém os dados)
+- `profitly.sync.funds-on-startup=false` — ligar só durante dev ativo da tela de fundos (cron das 18h mantém os dados)
 
 ## Fundos imobiliários (FII) — tela avançada, tabelas próprias
 
-FII tem vertical dedicada e ISOLADA de Fundos (não reusar as tabelas/serviços de fundos): `fii_indicators`, `fii_indicator_history`, `fii_dividend_events`, `fii_documents`. Serviço `FiiAnalysisService`, scheduler `FiiIndicatorSyncScheduler` (19h30 BRT), controller `/api/fii/**`, tela `FiiAnalysisPage` no `TickerAnalysis.tsx` (dispatch por `isFii`, ANTES de `isFund`).
+FII tem vertical dedicada e ISOLADA de Fundos (não reusar as tabelas/serviços de fundos): `fii_indicators`, `fii_indicator_history`, `fii_dividend_events`, `fii_documents`. Serviço `FiiAnalysisService`, scheduler `FiiIndicatorSyncScheduler` (disparado às 18h00 BRT pelo `DailyMarketSyncScheduler`), controller `/api/fii/**`, tela `FiiAnalysisPage` no `TickerAnalysis.tsx` (dispatch por `isFii`, ANTES de `isFund`).
 
 - **TODOS os endpoints `/api/v2/fii/*` aceitam até 20 símbolos por chamada** — batelar tudo em lotes de 20 (indicators, history, dividends, properties, portfolio, reports). NÃO chamar 1 por FII: são ~1028 FIIs, vira milhares de requisições e o sync trava antes das fases finais (foi o bug original: dividendos/documentos/preços nunca populavam)
 - **`/fii/list` NÃO traz** equity/totalAssets/sharesOutstanding/dividendYield1m/monthlyReturn/asOfDate — só vêm de **`/fii/indicators`** (enriquecer o catálogo em lote). A resposta de `/fii/indicators` é **FLAT** (campos no topo, não aninhada em `data`/`administrator` — o DTO aninhado antigo nunca parseava porque o método não era usado)
@@ -86,7 +86,7 @@ FII tem vertical dedicada e ISOLADA de Fundos (não reusar as tabelas/serviços 
 - Datas de dividendos vêm com hora/tz ("2026-05-29 00:00:00+00") — cortar em 10 chars (`date10`) no serviço (o `fmtDateOnly` do front quebra ao dividir por "-")
 - Composição da carteira: `/fii/portfolio` → `allocations[]` por `assetClass` (cri, fii, real_estate, real_estate_company...) → `AllocationBars`
 - `FiiIndicatorSyncScheduler`: list → saveCurrent → syncIndicators (lote 20, enriquece) → indicator history (backfill 2016/incremental 3m) → dividendos (dedup por symbol+paymentDate+rate) → documentos (reports 13m + properties/portfolio + *_history) → preço (backfill 2015/incremental 3m) → variação diária
-- `profitly.sync.fii-on-startup=false` — ligar só durante dev ativo da tela de FII (cron das 19h30 mantém os dados). **Sync completo dos 1028 FIIs leva ~10-15 min** e a brapi limita (rate limit) — erros intermitentes "Token não fornecido" são normais, o sync trata por lote
+- `profitly.sync.fii-on-startup=false` — ligar só durante dev ativo da tela de FII (cron das 18h mantém os dados). **Sync completo dos 1028 FIIs leva ~10-15 min** e a brapi limita (rate limit) — erros intermitentes "Token não fornecido" são normais, o sync trata por lote
 
 ## Carteira (módulo `wallet`)
 

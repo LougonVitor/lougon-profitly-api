@@ -769,11 +769,19 @@ public class BrapiAnalysisClient {
     }
 
     public List<BrapiFiiDividendsResponse.FiiDividend> fetchFiiDividends(String symbol) {
+        return fetchFiiDividends(symbol, null);
+    }
+
+    /** Fetches FII payouts for one symbol, optionally bounded by the payout window. */
+    public List<BrapiFiiDividendsResponse.FiiDividend> fetchFiiDividends(String symbol, String startDate) {
         try {
             BrapiFiiDividendsResponse response = webClient.get()
-                    .uri(u -> u.path("/api/v2/fii/dividends")
-                            .queryParam("symbols", symbol)
-                            .build())
+                    .uri(u -> {
+                        var b = u.path("/api/v2/fii/dividends")
+                                .queryParam("symbols", symbol);
+                        if (startDate != null) b = b.queryParam("startDate", startDate);
+                        return b.build();
+                    })
                     .retrieve()
                     .bodyToMono(BrapiFiiDividendsResponse.class)
                     .block();

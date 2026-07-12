@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.domain.model.PricePoint;
 import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
@@ -95,7 +94,6 @@ public class FundSyncScheduler {
         syncAll();
     }
 
-    @Scheduled(cron = "0 40 19 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
         // 1. Catalog per assetType — one /funds/list call each brings everything
         Map<String, List<String>> symbolsByType = new LinkedHashMap<>();

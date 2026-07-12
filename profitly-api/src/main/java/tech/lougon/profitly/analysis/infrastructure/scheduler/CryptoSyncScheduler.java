@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.domain.model.PricePoint;
 import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
@@ -94,7 +93,6 @@ public class CryptoSyncScheduler {
         syncAll();
     }
 
-    @Scheduled(cron = "0 50 19 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
         // Step 1: coin catalog
         List<String> coins = brapiClient.fetchCryptoAvailable();

@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.domain.model.PricePoint;
 import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
@@ -98,8 +97,7 @@ public class FiiIndicatorSyncScheduler {
         syncAll();
     }
 
-    /** Nightly sync at 19:30, after main ticker sync (19:00). */
-    @Scheduled(cron = "0 30 19 * * *", zone = "America/Sao_Paulo")
+    /** Invoked by the unified 18h market synchronizer after the ticker catalog. */
     public void syncAll() {
         // Calling without ?symbols returns ALL FIIs that brapi has indexed
         List<BrapiFiiListResponse.FiiListItem> allFiis = brapiClient.fetchFiiList();

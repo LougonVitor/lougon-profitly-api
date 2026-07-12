@@ -3,7 +3,6 @@ package tech.lougon.profitly.analysis.infrastructure.startup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.application.service.AnalysisService;
 import tech.lougon.profitly.ticker.application.service.TickerService;
@@ -24,9 +23,8 @@ public class AnalysisWarmupRunner {
         this.tickerService = tickerService;
     }
 
-    @Scheduled(cron = "0 5 19 * * *", zone = "America/Sao_Paulo")
     public void scheduledSync() {
-        log.info("Daily 19h05 analysis sync triggered");
+        log.info("Explicit analysis sync triggered");
         syncAsync();
     }
 

@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.application.service.AnalysisService;
 import tech.lougon.profitly.analysis.domain.model.DividendEvent;
@@ -92,8 +91,7 @@ public class StockAnalysisSyncScheduler {
         syncAll();
     }
 
-    /** Nightly at 20:00 BRT, after ticker/FII/fund/treasury/crypto syncs. */
-    @Scheduled(cron = "0 0 20 * * *", zone = "America/Sao_Paulo")
+    /** Invoked by the unified 18h market synchronizer after ticker-dependent modules. */
     public void syncAll() {
         List<String> symbols = tickerRepo.findAll().stream()
                 .filter(t -> "stock".equalsIgnoreCase(t.getSubType()) || "unit".equalsIgnoreCase(t.getSubType()))

@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiTreasuryListResponse;
@@ -65,7 +64,6 @@ public class TreasurySyncScheduler {
         syncAll();
     }
 
-    @Scheduled(cron = "0 45 19 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
         // /api/v2/treasury/list already returns current rates and prices — no separate indicators call needed
         List<BrapiTreasuryListResponse.TreasuryItem> list = brapiClient.fetchTreasuryList();

@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.ticker.application.service.TickerService;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
@@ -35,10 +34,9 @@ public class TickerSyncScheduler {
         log.info("Ticker startup sync finished");
     }
 
-    @Scheduled(cron = "0 0 19 * * *", zone = "America/Sao_Paulo")
     public void scheduledSync() {
-        log.info("Daily 19h ticker sync started");
+        log.info("Daily ticker sync started");
         tickerService.syncAll();
-        log.info("Daily 19h ticker sync finished");
+        log.info("Daily ticker sync finished");
     }
 }

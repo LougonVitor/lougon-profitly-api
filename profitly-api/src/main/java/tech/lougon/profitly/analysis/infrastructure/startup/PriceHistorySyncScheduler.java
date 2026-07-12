@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.SequencedSet;
+import java.time.LocalDate;
 
 @Component
 public class PriceHistorySyncScheduler {
@@ -29,22 +30,19 @@ public class PriceHistorySyncScheduler {
     private final tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient brapiClient;
     private final tech.lougon.profitly.analysis.infrastructure.persistence.JpaDividendEventRepository dividendEventRepository;
     private final tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiDividendEventRepository fiiDividendEventRepository;
-    private final tech.lougon.profitly.analysis.infrastructure.persistence.JpaFundDividendEventRepository fundDividendEventRepository;
 
     public PriceHistorySyncScheduler(AnalysisService analysisService,
                                      JpaWalletPositionRepository positionRepository,
                                      PriceHistoryRepository priceHistoryRepository,
                                      tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient brapiClient,
                                      tech.lougon.profitly.analysis.infrastructure.persistence.JpaDividendEventRepository dividendEventRepository,
-                                     tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiDividendEventRepository fiiDividendEventRepository,
-                                     tech.lougon.profitly.analysis.infrastructure.persistence.JpaFundDividendEventRepository fundDividendEventRepository) {
+                                     tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiDividendEventRepository fiiDividendEventRepository) {
         this.analysisService = analysisService;
         this.positionRepository = positionRepository;
         this.priceHistoryRepository = priceHistoryRepository;
         this.brapiClient = brapiClient;
         this.dividendEventRepository = dividendEventRepository;
         this.fiiDividendEventRepository = fiiDividendEventRepository;
-        this.fundDividendEventRepository = fundDividendEventRepository;
     }
 
     // Dev-only flag — syncs wallet tickers' price history right after boot
@@ -60,17 +58,15 @@ public class PriceHistorySyncScheduler {
     }
 
     // Runs at 19:02 daily — syncs portfolio tickers (keep price chart up-to-date)
-    @Scheduled(cron = "0 2 19 * * *", zone = "America/Sao_Paulo")
     public void scheduledSync() {
-        log.info("Daily price history sync triggered");
+        log.info("Daily wallet price history sync triggered");
         syncAsync();
     }
 
     // Runs at 02:30 nightly — fills gaps for tickers with dividends but no price history
     // This enables accurate historical DY% on the analysis page without any live brapi call per user
-    @Scheduled(cron = "0 30 2 * * *", zone = "America/Sao_Paulo")
     public void scheduledDividendTickerSync() {
-        log.info("Nightly dividend-ticker price history backfill triggered");
+        log.info("Dividend-ticker price history backfill triggered");
         syncDividendTickersAsync();
     }
 
@@ -79,7 +75,7 @@ public class PriceHistorySyncScheduler {
         List<String> symbols = positionRepository.findDistinctTickers();
         log.info("Starting price history sync for {} portfolio tickers", symbols.size());
         runSync(symbols);
-        backfillMissingDividendEvents(symbols);
+        reconcileWalletFiiDividends(symbols);
     }
 
     /**
@@ -89,19 +85,20 @@ public class PriceHistorySyncScheduler {
      * works for any listed fund, with the legacy quote endpoint as fallback — and
      * store them in fii_dividend_events, which the wallet dividend sync reads.
      */
-    private void backfillMissingDividendEvents(List<String> symbols) {
+    private void reconcileWalletFiiDividends(List<String> symbols) {
+        String startDate = LocalDate.now().minusMonths(18).toString();
         for (String symbol : symbols) {
             if (symbol.toLowerCase().startsWith("tesouro-")) continue;
             try {
-                boolean hasEvents = !dividendEventRepository.findBySymbolOrderByLastDatePriorDesc(symbol).isEmpty()
-                        || fiiDividendEventRepository.countBySymbol(symbol) > 0
-                        || fundDividendEventRepository.countBySymbol(symbol) > 0;
-                if (hasEvents) continue;
+                if (!dividendEventRepository.findBySymbolOrderByLastDatePriorDesc(symbol).isEmpty()) continue;
 
                 var toSave = new ArrayList<tech.lougon.profitly.analysis.infrastructure.persistence.FiiDividendEventJpaEntity>();
                 var seen = new LinkedHashSet<String>();
+                for (var existing : fiiDividendEventRepository.findBySymbolOrderByPaymentDateDesc(symbol)) {
+                    seen.add(eventKey(existing.getPaymentDate(), existing.getRate()));
+                }
 
-                var fiiDividends = brapiClient.fetchFiiDividends(symbol);
+                var fiiDividends = brapiClient.fetchFiiDividends(symbol, startDate);
                 if (!fiiDividends.isEmpty()) {
                     for (var d : fiiDividends) {
                         addEvent(toSave, seen, symbol, d.lastDatePrior(), d.paymentDate(), d.rate(),
@@ -115,7 +112,7 @@ public class PriceHistorySyncScheduler {
 
                 if (!toSave.isEmpty()) {
                     fiiDividendEventRepository.saveAll(toSave);
-                    log.info("Dividend backfill: {} events stored for wallet ticker {}", toSave.size(), symbol);
+                    log.info("Dividend reconciliation: {} events stored for wallet ticker {}", toSave.size(), symbol);
                 }
                 Thread.sleep(DELAY_MS);
             } catch (InterruptedException e) {
@@ -131,15 +128,24 @@ public class PriceHistorySyncScheduler {
                           LinkedHashSet<String> seen,
                           String symbol, String lastDatePrior, String paymentDate, Double rate, String label) {
         if (rate == null || paymentDate == null) return;
-        if (!seen.add(paymentDate + "|" + rate)) return; // table is unique on symbol+payment_date+rate
+        String normalizedPaymentDate = date10(paymentDate);
+        if (normalizedPaymentDate == null || !seen.add(eventKey(normalizedPaymentDate, rate))) return;
         var entity = new tech.lougon.profitly.analysis.infrastructure.persistence.FiiDividendEventJpaEntity();
         entity.setSymbol(symbol);
-        entity.setLastDatePrior(lastDatePrior);
-        entity.setPaymentDate(paymentDate);
+        entity.setLastDatePrior(date10(lastDatePrior));
+        entity.setPaymentDate(normalizedPaymentDate);
         entity.setRate(rate);
         entity.setLabel(label != null && label.length() > 60 ? label.substring(0, 60) : label);
         entity.setSyncedAt(java.time.Instant.now());
         toSave.add(entity);
+    }
+
+    private static String eventKey(String paymentDate, Double rate) {
+        return date10(paymentDate) + "|" + rate;
+    }
+
+    private static String date10(String raw) {
+        return raw != null && raw.length() >= 10 ? raw.substring(0, 10) : null;
     }
 
     @Async
