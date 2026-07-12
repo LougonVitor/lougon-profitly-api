@@ -65,14 +65,17 @@ public class DividendService {
     /** A market dividend event, whatever table it came from. */
     private record MarketEvent(String exDate, String paymentDate, Double rate, String label) {}
 
-    public List<Dividend> syncFromMarket(String walletId, String userId) {
+    // synchronized: the frontend may fire two syncs concurrently (StrictMode double
+    // mount); both would read the existing set before either saves, duplicating rows.
+    public synchronized List<Dividend> syncFromMarket(String walletId, String userId) {
         var wallet = requireOwnedWallet(walletId, userId);
 
-        // Dedup key: ticker|paymentDate|type — lets a dividend and a JCP paid on the
-        // same date coexist while still skipping events already imported or typed by hand.
+        // Dedup key: ticker|paymentDate|type|amount — the amount distinguishes two
+        // JCPs paid on the same date (BBAS3 does this) while still skipping events
+        // already imported or typed by hand.
         Set<String> seen = new HashSet<>();
         for (var existing : repository.findByWalletId(walletId)) {
-            seen.add(dedupKey(existing.ticker(), existing.paymentDate(), existing.type()));
+            seen.add(dedupKey(existing.ticker(), existing.paymentDate(), existing.type(), existing.totalAmount()));
         }
 
         List<Dividend> created = new ArrayList<>();
@@ -84,8 +87,6 @@ public class DividendService {
                 if (exDate == null || paymentDate == null || event.rate() == null) continue;
 
                 String type = event.label() != null ? event.label() : "Dividendo";
-                String key = dedupKey(position.ticker(), paymentDate, type);
-                if (seen.contains(key)) continue;
 
                 BigDecimal quantityAtExDate = position.entries().stream()
                         .filter(entry -> !entry.date().isAfter(exDate))
@@ -96,6 +97,9 @@ public class DividendService {
 
                 BigDecimal totalAmount = BigDecimal.valueOf(event.rate())
                         .multiply(quantityAtExDate);
+
+                String key = dedupKey(position.ticker(), paymentDate, type, totalAmount);
+                if (seen.contains(key)) continue;
 
                 var dividend = new Dividend(null, walletId, userId,
                         position.ticker(), totalAmount, paymentDate,
@@ -126,8 +130,11 @@ public class DividendService {
         return events;
     }
 
-    private String dedupKey(String ticker, LocalDate paymentDate, String type) {
-        return ticker + "|" + paymentDate + "|" + (type != null ? type.trim().toUpperCase() : "");
+    private String dedupKey(String ticker, LocalDate paymentDate, String type, BigDecimal amount) {
+        String amountKey = amount != null
+                ? amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+                : "";
+        return ticker + "|" + paymentDate + "|" + (type != null ? type.trim().toUpperCase() : "") + "|" + amountKey;
     }
 
     /** Event dates come as strings, sometimes with time/tz — take the first 10 chars. */
