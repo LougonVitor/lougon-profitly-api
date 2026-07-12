@@ -25,6 +25,7 @@ public class DailyMarketSyncScheduler {
     private final TreasurySyncScheduler treasurySync;
     private final CryptoSyncScheduler cryptoSync;
     private final StockAnalysisSyncScheduler stockSync;
+    private final MacroIndexSyncScheduler macroSync;
     private final PriceHistorySyncScheduler walletPriceSync;
     private final IbovespaSyncScheduler ibovespaSync;
     private final NewsSyncScheduler newsSync;
@@ -35,6 +36,7 @@ public class DailyMarketSyncScheduler {
                                     TreasurySyncScheduler treasurySync,
                                     CryptoSyncScheduler cryptoSync,
                                     StockAnalysisSyncScheduler stockSync,
+                                    MacroIndexSyncScheduler macroSync,
                                     PriceHistorySyncScheduler walletPriceSync,
                                     IbovespaSyncScheduler ibovespaSync,
                                     NewsSyncScheduler newsSync) {
@@ -44,6 +46,7 @@ public class DailyMarketSyncScheduler {
         this.treasurySync = treasurySync;
         this.cryptoSync = cryptoSync;
         this.stockSync = stockSync;
+        this.macroSync = macroSync;
         this.walletPriceSync = walletPriceSync;
         this.ibovespaSync = ibovespaSync;
         this.newsSync = newsSync;
@@ -58,6 +61,7 @@ public class DailyMarketSyncScheduler {
         run("treasury", treasurySync::syncAll);
         run("crypto", cryptoSync::syncAll);
         run("stocks", stockSync::syncAll);
+        run("macro indexes", macroSync::syncAll);
         run("wallet price history and dividends", walletPriceSync::scheduledSync);
         run("Ibovespa", ibovespaSync::syncAllRanges);
         run("news", newsSync::sync);

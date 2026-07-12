@@ -955,6 +955,77 @@ class BrapiDtoParseTest {
         assertThat(response.data().get(1).valueClassification()).isEqualTo("Greed");
     }
 
+    // ── Macro indexes (CDI/Selic/IPCA) ──────────────────────────────────────────
+
+    @Test
+    void macro_parsesSeriesWithObservations() throws Exception {
+        // Real /api/v2/macro?symbols=cdi,selic,ipca shape: results[].series + results[].observations
+        String json = """
+                {
+                  "results": [
+                    {
+                      "series": {
+                        "slug": "cdi",
+                        "name": "CDI",
+                        "unit": "percentPerDay",
+                        "frequency": "daily",
+                        "category": "interestRate"
+                      },
+                      "observations": [
+                        { "date": "2026-07-09", "value": 0.052531 },
+                        { "date": "2026-07-08", "value": 0.052531 }
+                      ]
+                    },
+                    {
+                      "series": {
+                        "slug": "selic",
+                        "name": "Taxa Selic",
+                        "unit": "percentPerYear",
+                        "frequency": "daily",
+                        "category": "interestRate"
+                      },
+                      "observations": [
+                        { "date": "2026-07-12", "value": 14.25 }
+                      ]
+                    },
+                    {
+                      "series": {
+                        "slug": "ipca",
+                        "name": "IPCA",
+                        "unit": "percentPerMonth",
+                        "frequency": "monthly",
+                        "category": "inflation"
+                      },
+                      "observations": [
+                        { "date": "2026-06-01", "value": 0.16 }
+                      ]
+                    }
+                  ],
+                  "requestedAt": "2026-07-12T21:03:44.890Z",
+                  "took": 6
+                }
+                """;
+
+        BrapiMacroResponse response = mapper.readValue(json, BrapiMacroResponse.class);
+
+        assertThat(response.results()).hasSize(3);
+        var cdi = response.results().get(0);
+        assertThat(cdi.series().slug()).isEqualTo("cdi");
+        assertThat(cdi.series().unit()).isEqualTo("percentPerDay");
+        assertThat(cdi.observations()).hasSize(2);
+        assertThat(cdi.observations().get(0).date()).isEqualTo("2026-07-09");
+        assertThat(cdi.observations().get(0).value()).isEqualTo(0.052531);
+
+        var selic = response.results().get(1);
+        assertThat(selic.series().slug()).isEqualTo("selic");
+        assertThat(selic.series().unit()).isEqualTo("percentPerYear");
+        assertThat(selic.observations().get(0).value()).isEqualTo(14.25);
+
+        var ipca = response.results().get(2);
+        assertThat(ipca.series().unit()).isEqualTo("percentPerMonth");
+        assertThat(ipca.observations().get(0).value()).isEqualTo(0.16);
+    }
+
     @Test
     void stockStatements_preservesAllFieldsAsRawJson() throws Exception {
         String json = """
