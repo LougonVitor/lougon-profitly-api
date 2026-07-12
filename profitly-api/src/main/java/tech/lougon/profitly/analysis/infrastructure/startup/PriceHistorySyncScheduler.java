@@ -2,6 +2,9 @@ package tech.lougon.profitly.analysis.infrastructure.startup;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -30,6 +33,18 @@ public class PriceHistorySyncScheduler {
         this.analysisService = analysisService;
         this.positionRepository = positionRepository;
         this.priceHistoryRepository = priceHistoryRepository;
+    }
+
+    // Dev-only flag — syncs wallet tickers' price history right after boot
+    @Value("${profitly.sync.wallet-prices-on-startup:false}")
+    private boolean walletPricesOnStartup;
+
+    @EventListener(ApplicationReadyEvent.class)
+    @Async
+    public void syncOnStartup() {
+        if (!walletPricesOnStartup) return;
+        log.info("Running wallet price history startup sync");
+        syncAsync();
     }
 
     // Runs at 19:02 daily — syncs portfolio tickers (keep price chart up-to-date)

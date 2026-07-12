@@ -31,11 +31,14 @@ public class WalletEvolutionService {
 
     private final WalletService walletService;
     private final JpaPricePointRepository pricePointRepository;
+    private final tech.lougon.profitly.analysis.infrastructure.persistence.JpaTreasuryBondHistoryRepository treasuryHistoryRepository;
 
     public WalletEvolutionService(WalletService walletService,
-                                  JpaPricePointRepository pricePointRepository) {
+                                  JpaPricePointRepository pricePointRepository,
+                                  tech.lougon.profitly.analysis.infrastructure.persistence.JpaTreasuryBondHistoryRepository treasuryHistoryRepository) {
         this.walletService = walletService;
         this.pricePointRepository = pricePointRepository;
+        this.treasuryHistoryRepository = treasuryHistoryRepository;
     }
 
     public List<EvolutionPoint> evolution(String walletId, String userId) {
@@ -82,6 +85,21 @@ public class WalletEvolutionService {
 
     private NavigableMap<LocalDate, BigDecimal> loadPrices(String symbol, LocalDate from) {
         NavigableMap<LocalDate, BigDecimal> prices = new TreeMap<>();
+        // Treasury history lives in treasury_bond_history, not price_points; the
+        // sell price is the mark-to-market value of a bond already held.
+        if (symbol.toLowerCase().startsWith("tesouro-")) {
+            for (var h : treasuryHistoryRepository.findBySymbolOrderByReferenceDateAsc(symbol)) {
+                if (h.getSellPrice() == null || h.getReferenceDate() == null
+                        || h.getReferenceDate().length() < 10) continue;
+                try {
+                    LocalDate d = LocalDate.parse(h.getReferenceDate().substring(0, 10));
+                    if (!d.isBefore(from)) prices.put(d, BigDecimal.valueOf(h.getSellPrice()));
+                } catch (java.time.format.DateTimeParseException ignored) {
+                    // skip malformed reference dates
+                }
+            }
+            return prices;
+        }
         for (PricePointJpaEntity p : pricePointRepository
                 .findBySymbolAndDateBetweenOrderByDateAsc(symbol, from, LocalDate.now())) {
             if (p.getClose() != null) prices.put(p.getDate(), p.getClose());
