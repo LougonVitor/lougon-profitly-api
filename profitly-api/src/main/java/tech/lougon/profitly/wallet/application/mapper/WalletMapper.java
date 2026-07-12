@@ -58,6 +58,7 @@ public class WalletMapper {
         BigDecimal currentPrice = marketData != null ? marketData.currentPrice() : BigDecimal.ZERO;
         String logoUrl = marketData != null ? marketData.logoUrl() : null;
         String assetType = marketData != null ? marketData.assetType() : null;
+        String name = marketData != null ? marketData.name() : null;
 
         BigDecimal averagePrice = position.averagePrice();
         BigDecimal qty = position.totalQuantity();
@@ -78,6 +79,7 @@ public class WalletMapper {
         return new WalletPositionSummaryDTO(
                 position.id(),
                 position.ticker(),
+                name,
                 logoUrl,
                 assetType,
                 qty,

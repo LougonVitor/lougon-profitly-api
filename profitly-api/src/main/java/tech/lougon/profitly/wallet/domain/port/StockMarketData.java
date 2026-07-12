@@ -5,5 +5,6 @@ import java.math.BigDecimal;
 public record StockMarketData(
         BigDecimal currentPrice,
         String logoUrl,
-        String assetType
+        String assetType,
+        String name
 ) {}

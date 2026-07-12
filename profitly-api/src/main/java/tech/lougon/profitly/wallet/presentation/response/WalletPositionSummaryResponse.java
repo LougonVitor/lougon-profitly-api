@@ -10,6 +10,7 @@ import java.util.List;
 public record WalletPositionSummaryResponse(
         String id,
         String ticker,
+        String name,
         String logoUrl,
         String assetType,
         BigDecimal quantity,
@@ -29,6 +30,7 @@ public record WalletPositionSummaryResponse(
         return new WalletPositionSummaryResponse(
                 dto.id(),
                 dto.ticker(),
+                dto.name(),
                 dto.logoUrl(),
                 dto.assetType(),
                 dto.quantity(),

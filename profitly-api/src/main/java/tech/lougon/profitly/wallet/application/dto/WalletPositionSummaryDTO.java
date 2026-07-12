@@ -6,6 +6,7 @@ import java.util.List;
 public record WalletPositionSummaryDTO(
         String id,
         String ticker,
+        String name,
         String logoUrl,
         String assetType,
         BigDecimal quantity,

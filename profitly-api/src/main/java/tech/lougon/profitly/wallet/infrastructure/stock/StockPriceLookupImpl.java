@@ -27,7 +27,8 @@ public class StockPriceLookupImpl implements StockPriceLookup {
         return tickerRepository.findBySymbol(symbol)
                 .or(() -> tickerRepository.findBySymbol(symbol.toUpperCase()))
                 .or(() -> tickerRepository.findBySymbol(symbol.toLowerCase()))
-                .map(t -> new StockMarketData(t.lastPrice(), t.logoUrl(), resolveType(t)))
+                .map(t -> new StockMarketData(t.lastPrice(), t.logoUrl(), resolveType(t),
+                        t.longName() != null ? t.longName() : t.name()))
                 .or(() -> findCrypto(symbol));
     }
 
@@ -55,6 +56,7 @@ public class StockPriceLookupImpl implements StockPriceLookup {
                 .map(q -> new StockMarketData(
                         BigDecimal.valueOf(q.getPrice()),
                         q.getImageUrl(),
-                        "crypto"));
+                        "crypto",
+                        q.getCoinName()));
     }
 }
