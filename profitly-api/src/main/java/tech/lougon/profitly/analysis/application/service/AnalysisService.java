@@ -156,8 +156,15 @@ public class AnalysisService {
                     ))
                     .toList();
         }
-        if (!points.isEmpty()) {
-            priceHistoryRepository.saveAll(points);
+        // Insert only bars newer than the last stored one — brapi always returns the
+        // full range and re-inserting an existing (symbol, date) row violates the
+        // unique constraint, aborting the whole save.
+        var latest = priceHistoryRepository.findLatestDateBySymbol(symbol);
+        List<PricePoint> newPoints = latest
+                .map(last -> points.stream().filter(p -> p.date().isAfter(last)).toList())
+                .orElse(points);
+        if (!newPoints.isEmpty()) {
+            priceHistoryRepository.saveAll(newPoints);
         }
     }
 
