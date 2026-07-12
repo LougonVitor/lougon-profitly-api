@@ -15,5 +15,5 @@ public record AddFixedIncomeEntryRequest(
         boolean dailyLiquidity,
         @NotNull @Positive BigDecimal principal,
         @NotNull LocalDate transactionDate,
-        @NotNull LocalDate maturityDate
+        LocalDate maturityDate
 ) {}

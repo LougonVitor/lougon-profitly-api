@@ -51,7 +51,12 @@ public class FixedIncomeService {
     public WalletSummaryDTO createPosition(String walletId, AddFixedIncomeEntryRequest request, String userId) {
         Wallet wallet = walletService.requireOwned(walletId, userId);
 
-        if (!request.maturityDate().isAfter(request.transactionDate())) {
+        // Daily-liquidity products can be redeemed anytime, so a maturity date isn't
+        // required to track them; everything else needs one to cap accrual against.
+        if (request.maturityDate() == null && !request.dailyLiquidity()) {
+            throw new IllegalArgumentException("Informe a data de vencimento ou marque liquidez diária");
+        }
+        if (request.maturityDate() != null && !request.maturityDate().isAfter(request.transactionDate())) {
             throw new IllegalArgumentException("Data de vencimento deve ser posterior à data da transação");
         }
 
