@@ -15,5 +15,7 @@ public record AddFixedIncomeEntryRequest(
         boolean dailyLiquidity,
         @NotNull @Positive BigDecimal principal,
         @NotNull LocalDate transactionDate,
-        LocalDate maturityDate
+        LocalDate maturityDate,
+        /** When set, adds this aporte to an existing renda-fixa position instead of creating a new one — issuer/instrumentType/indexer/ratePercent/dailyLiquidity/maturityDate are ignored in favor of the existing position's own terms. */
+        String existingTicker
 ) {}

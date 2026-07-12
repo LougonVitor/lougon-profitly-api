@@ -51,6 +51,10 @@ public class FixedIncomeService {
     public WalletSummaryDTO createPosition(String walletId, AddFixedIncomeEntryRequest request, String userId) {
         Wallet wallet = walletService.requireOwned(walletId, userId);
 
+        if (request.existingTicker() != null && !request.existingTicker().isBlank()) {
+            return addToExistingPosition(wallet, request);
+        }
+
         // Daily-liquidity products can be redeemed anytime, so a maturity date isn't
         // required to track them; everything else needs one to cap accrual against.
         if (request.maturityDate() == null && !request.dailyLiquidity()) {
@@ -78,6 +82,36 @@ public class FixedIncomeService {
 
         List<WalletPosition> updatedPositions = new ArrayList<>(wallet.positions());
         updatedPositions.add(position);
+
+        return save(wallet, updatedPositions);
+    }
+
+    /**
+     * Adds another aporte to an already-existing renda-fixa position instead of creating a
+     * new one — e.g. topping up the same CDB Inter 100% CDI over time. The position's own
+     * stored terms (issuer/instrumentType/indexer/ratePercent/dailyLiquidity/maturityDate)
+     * are authoritative; whatever the client sent for those fields is ignored.
+     */
+    private WalletSummaryDTO addToExistingPosition(Wallet wallet, AddFixedIncomeEntryRequest request) {
+        WalletPosition position = wallet.positions().stream()
+                .filter(p -> p.ticker().equalsIgnoreCase(request.existingTicker()))
+                .findFirst()
+                .orElseThrow(() -> new NoSuchElementException("Position not found: " + request.existingTicker()));
+
+        if (!position.isFixedIncome()) {
+            throw new IllegalArgumentException("Lançamento selecionado não é de renda fixa");
+        }
+
+        PositionEntry entry = new PositionEntry(
+                null, position.id(), request.transactionDate(), request.principal(), BigDecimal.ONE, EntryType.BUY, Instant.now()
+        );
+        List<PositionEntry> updatedEntries = new ArrayList<>(position.entries());
+        updatedEntries.add(entry);
+        WalletPosition updatedPosition = position.withEntries(updatedEntries);
+
+        List<WalletPosition> updatedPositions = wallet.positions().stream()
+                .map(p -> p.id().equals(position.id()) ? updatedPosition : p)
+                .toList();
 
         return save(wallet, updatedPositions);
     }
