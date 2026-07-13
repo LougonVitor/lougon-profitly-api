@@ -18,15 +18,15 @@ import java.util.Map;
 public class WalletMapper {
 
     public WalletSummaryDTO toSummaryDTO(Wallet wallet, Map<String, StockMarketData> marketDataByTicker) {
-        List<WalletPositionSummaryDTO> positions = wallet.positions().stream()
+        List<WalletPositionSummaryDTO> allPositions = wallet.positions().stream()
                 .map(position -> toPositionSummaryDTO(position, marketDataByTicker.get(position.ticker())))
                 .toList();
 
-        BigDecimal totalInvested = positions.stream()
+        BigDecimal totalInvested = allPositions.stream()
                 .map(WalletPositionSummaryDTO::totalInvested)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal currentValue = positions.stream()
+        BigDecimal currentValue = allPositions.stream()
                 .map(WalletPositionSummaryDTO::currentValue)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -37,14 +37,24 @@ public class WalletMapper {
                 : profitOrLoss.divide(totalInvested, 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100));
 
-        BigDecimal realized = positions.stream()
+        // realizedProfitOrLoss must include fully-sold (qty=0) positions — that's exactly where a
+        // position's realized gain/loss ends up once it's closed out — so it's summed from
+        // allPositions, not from the filtered list below.
+        BigDecimal realized = allPositions.stream()
                 .map(WalletPositionSummaryDTO::realizedProfitOrLoss)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // A fully sold/redeemed position (qty=0) has nothing left to show in the holdings table —
+        // its contribution already landed in realizedProfitOrLoss above — so it's dropped here,
+        // after the totals are computed from the unfiltered list.
+        List<WalletPositionSummaryDTO> visiblePositions = allPositions.stream()
+                .filter(p -> p.quantity().compareTo(BigDecimal.ZERO) != 0)
+                .toList();
 
         return new WalletSummaryDTO(
                 wallet.id(),
                 wallet.name(),
-                positions,
+                visiblePositions,
                 totalInvested,
                 currentValue,
                 profitOrLoss,
