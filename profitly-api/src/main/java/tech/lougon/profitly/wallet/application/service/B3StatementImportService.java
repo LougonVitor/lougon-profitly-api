@@ -31,18 +31,14 @@ public class B3StatementImportService {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     // Compared against the accent-stripped, upper-cased value produced by normalize().
+    // "Atualização" is deliberately NOT here: on real statements it's a custody reconciliation that
+    // duplicates shares already recorded by trades (e.g. BBAS3 gained a phantom +111), so importing
+    // it double-counts. The cost of leaving it out is that a ticker rename (TRPL4->ISAE4, whose only
+    // record of the old shares is an "Atualização" credit) can't be reconstructed — an acceptable
+    // trade since those positions are typically already divested.
     private static final List<String> IMPORTABLE_MOVEMENT_TYPES = List.of(
-            "COMPRA", "VENDA", "TRANSFERENCIA", "TRANSFERENCIA - LIQUIDACAO", "ATUALIZACAO"
+            "COMPRA", "VENDA", "TRANSFERENCIA", "TRANSFERENCIA - LIQUIDACAO"
     );
-
-    /**
-     * "Atualização" credits extra shares with no unit price (dividend-reinvestment programs like
-     * BTG's PIC) — imported as a zero-cost BUY so quantity stays right, at the expense of slightly
-     * understating average cost for the affected ticker (the real reinvestment cost isn't in the
-     * statement). Fixed-income products also use "Atualização" (interest accrual) but never reach
-     * here since isFixedIncomeProduct filters them out first.
-     */
-    private static final List<String> ZERO_COST_CREDIT_MOVEMENT_TYPES = List.of("ATUALIZACAO");
 
     private static final List<String> FIXED_INCOME_PREFIXES = List.of(
             "CDB", "LCI", "LCA", "CRI", "CRA", "TESOURO"
@@ -80,15 +76,10 @@ public class B3StatementImportService {
                 continue;
             }
 
-            BigDecimal unitPrice = row.unitPrice();
-            if (unitPrice == null && row.credit() && ZERO_COST_CREDIT_MOVEMENT_TYPES.contains(normalize(row.movementType()))) {
-                unitPrice = BigDecimal.ZERO;
-            }
-
             // Custody transfers between brokers for the same position carry no price ("-" in the
             // sheet) — nothing to reconstruct a cost basis from, so surface them as skipped rather
             // than importing at a fabricated price.
-            if (row.quantity() == null || unitPrice == null) {
+            if (row.quantity() == null || row.unitPrice() == null) {
                 skippedByType.merge(row.movementType() + " (sem preço)", 1, Integer::sum);
                 continue;
             }
@@ -96,7 +87,7 @@ public class B3StatementImportService {
             try {
                 String ticker = extractTicker(row.product());
                 String type = row.credit() ? "BUY" : "SELL";
-                AddEntryRequest request = new AddEntryRequest(row.date(), row.quantity(), unitPrice, type);
+                AddEntryRequest request = new AddEntryRequest(row.date(), row.quantity(), row.unitPrice(), type);
                 walletService.addEntry(walletId, ticker, request, userId);
                 imported.incrementAndGet();
             } catch (RuntimeException e) {
