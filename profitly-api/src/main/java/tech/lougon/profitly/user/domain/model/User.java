@@ -6,10 +6,6 @@ public record User(
         String id,
         String username,
         String email,
-        String password,
-        String phone,
         String googleId,
-        boolean emailConsent,
-        boolean smsConsent,
         Instant createdAt
 ) {}

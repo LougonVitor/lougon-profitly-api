@@ -25,20 +25,8 @@ public class UserJpaEntity {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
-    @Column(name = "password")
-    private String password;
-
-    @Column(name = "phone")
-    private String phone;
-
     @Column(name = "google_id", unique = true)
     private String googleId;
-
-    @Column(name = "email_consent", nullable = false)
-    private boolean emailConsent = false;
-
-    @Column(name = "sms_consent", nullable = false)
-    private boolean smsConsent = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

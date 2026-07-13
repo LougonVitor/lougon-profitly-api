@@ -23,7 +23,7 @@ public class UserSecurityDetails implements UserDetails {
 
     @Override
     public String getPassword() {
-        return user.password();
+        return null;
     }
 
     @Override

@@ -8,6 +8,5 @@ public interface JpaUserRepository extends JpaRepository<UserJpaEntity, String> 
     Optional<UserJpaEntity> findByEmail(String email);
     Optional<UserJpaEntity> findByUsername(String username);
     Optional<UserJpaEntity> findByGoogleId(String googleId);
-    boolean existsByEmail(String email);
     boolean existsByUsername(String username);
 }

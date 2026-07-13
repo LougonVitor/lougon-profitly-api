@@ -36,11 +36,6 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
-    public boolean existsByEmail(String email) {
-        return jpa.existsByEmail(email);
-    }
-
-    @Override
     public boolean existsByUsername(String username) {
         return jpa.existsByUsername(username);
     }
@@ -50,19 +45,14 @@ public class UserRepositoryImpl implements UserRepository {
         e.setId(u.id());
         e.setUsername(u.username());
         e.setEmail(u.email());
-        e.setPassword(u.password());
-        e.setPhone(u.phone());
         e.setGoogleId(u.googleId());
-        e.setEmailConsent(u.emailConsent());
-        e.setSmsConsent(u.smsConsent());
         e.setCreatedAt(u.createdAt());
         return e;
     }
 
     private User toDomain(UserJpaEntity e) {
         return new User(
-                e.getId(), e.getUsername(), e.getEmail(), e.getPassword(),
-                e.getPhone(), e.getGoogleId(), e.isEmailConsent(), e.isSmsConsent(),
+                e.getId(), e.getUsername(), e.getEmail(), e.getGoogleId(),
                 e.getCreatedAt()
         );
     }
