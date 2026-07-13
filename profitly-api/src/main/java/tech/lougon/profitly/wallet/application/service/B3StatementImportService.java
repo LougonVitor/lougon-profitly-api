@@ -53,6 +53,14 @@ public class B3StatementImportService {
             throw new IllegalArgumentException("Não foi possível ler o arquivo enviado: " + e.getMessage(), e);
         }
 
+        // The B3 sheet lists rows newest-first. WalletPosition.costWalk() sorts by date when
+        // computing average cost, but WalletService.addEntry's "can't sell more than you hold"
+        // guard only sees entries already inserted — so a sell must be applied strictly after its
+        // matching earlier buy, meaning we must insert in chronological (oldest-first) order here.
+        rows = rows.stream()
+                .sorted(java.util.Comparator.comparing(StatementRow::date))
+                .toList();
+
         AtomicInteger imported = new AtomicInteger();
         Map<String, Integer> skippedByType = new LinkedHashMap<>();
         List<String> errors = new java.util.ArrayList<>();
