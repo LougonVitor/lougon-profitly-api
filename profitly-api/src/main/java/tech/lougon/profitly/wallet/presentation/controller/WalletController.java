@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.lougon.profitly.wallet.application.service.B3StatementImportService;
 import tech.lougon.profitly.wallet.application.service.FixedIncomeService;
 import tech.lougon.profitly.wallet.application.service.WalletService;
 import tech.lougon.profitly.wallet.presentation.request.AddEntryRequest;
@@ -12,8 +14,10 @@ import tech.lougon.profitly.wallet.presentation.request.AddFixedIncomeEntryReque
 import tech.lougon.profitly.wallet.presentation.request.CreateWalletRequest;
 import tech.lougon.profitly.wallet.presentation.request.RedeemFixedIncomeRequest;
 import tech.lougon.profitly.wallet.presentation.request.UpdateEntryRequest;
+import tech.lougon.profitly.wallet.presentation.response.B3ImportResultResponse;
 import tech.lougon.profitly.wallet.presentation.response.WalletSummaryResponse;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -24,13 +28,16 @@ public class WalletController {
     private final WalletService walletService;
     private final FixedIncomeService fixedIncomeService;
     private final tech.lougon.profitly.wallet.application.service.WalletEvolutionService evolutionService;
+    private final B3StatementImportService b3StatementImportService;
 
     public WalletController(WalletService walletService,
                             FixedIncomeService fixedIncomeService,
-                            tech.lougon.profitly.wallet.application.service.WalletEvolutionService evolutionService) {
+                            tech.lougon.profitly.wallet.application.service.WalletEvolutionService evolutionService,
+                            B3StatementImportService b3StatementImportService) {
         this.walletService = walletService;
         this.fixedIncomeService = fixedIncomeService;
         this.evolutionService = evolutionService;
+        this.b3StatementImportService = b3StatementImportService;
     }
 
     @GetMapping("/{walletId}/evolution")
@@ -62,6 +69,17 @@ public class WalletController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(WalletSummaryResponse.from(walletService.create(request.name(), userId)));
+    }
+
+    @PostMapping("/{walletId}/import/b3")
+    public ResponseEntity<B3ImportResultResponse> importB3Statement(
+            @AuthenticationPrincipal String userId,
+            @PathVariable String walletId,
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        walletService.findById(walletId, userId); // enforces ownership, 404s otherwise
+        var result = b3StatementImportService.importStatement(walletId, userId, file.getInputStream());
+        return ResponseEntity.ok(B3ImportResultResponse.from(result));
     }
 
     @PatchMapping("/{walletId}/name")

@@ -219,14 +219,18 @@ public class WalletService {
                 .orElseThrow(() -> new NoSuchElementException("Entry not found: " + entryId));
     }
 
-    /** Package-visible so {@link FixedIncomeService} can build the same response shape after its own saves. */
+    /**
+     * Package-visible so {@link FixedIncomeService} can build the same response shape after its own saves.
+     * Built with a plain loop (not {@link Collectors#toMap}) because a ticker with no market data yet
+     * (e.g. just imported, not synced) resolves to {@code null}, which {@code Collectors.toMap}'s internal
+     * {@code HashMap.merge} rejects with an NPE.
+     */
     Map<String, StockMarketData> resolveMarketData(Wallet wallet) {
-        return wallet.positions().stream()
-                .collect(Collectors.toMap(
-                        WalletPosition::ticker,
-                        this::resolvePositionMarketData,
-                        (a, b) -> a
-                ));
+        Map<String, StockMarketData> result = new java.util.HashMap<>();
+        for (WalletPosition position : wallet.positions()) {
+            result.putIfAbsent(position.ticker(), resolvePositionMarketData(position));
+        }
+        return result;
     }
 
     private StockMarketData resolvePositionMarketData(WalletPosition position) {
