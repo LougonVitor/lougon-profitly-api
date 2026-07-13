@@ -13,5 +13,6 @@ public record WalletSummaryDTO(
         BigDecimal profitOrLoss,
         BigDecimal profitOrLossPercent,
         BigDecimal realizedProfitOrLoss,
+        String source,
         Instant createdAt
 ) {}

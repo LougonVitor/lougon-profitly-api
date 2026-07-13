@@ -27,7 +27,8 @@ public class InfraWalletMapper {
                 entity.getName(),
                 entity.getUserId(),
                 positions,
-                entity.getCreatedAt()
+                entity.getCreatedAt(),
+                tech.lougon.profitly.wallet.domain.model.WalletSource.fromNullable(entity.getSource())
         );
     }
 
@@ -37,6 +38,7 @@ public class InfraWalletMapper {
         entity.setName(wallet.name());
         entity.setUserId(wallet.userId());
         entity.setCreatedAt(wallet.createdAt());
+        entity.setSource(wallet.sourceOrManual().name());
 
         List<WalletPositionJpaEntity> positionEntities = wallet.positions().stream()
                 .map(position -> toPositionEntity(position, entity))

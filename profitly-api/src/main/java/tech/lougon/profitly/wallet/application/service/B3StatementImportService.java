@@ -66,7 +66,17 @@ public class B3StatementImportService {
                 .sorted(java.util.Comparator.comparing(StatementRow::date))
                 .toList();
 
+        // Dedup makes the import idempotent so a wallet can be reintegrated with newer statements:
+        // build a multiset of the trades ALREADY in the wallet (keyed by ticker|date|qty|price|type),
+        // and skip an incoming row only while a matching, not-yet-consumed entry still exists. Counting
+        // (rather than a plain set) preserves genuine same-day repeat trades: if the wallet holds one
+        // BBAS3 buy of 100@10 and the file lists two, the second is still imported. On a full re-import
+        // every row matches an existing entry, so nothing is duplicated. On creation the wallet is empty,
+        // so this is a no-op and behaviour is unchanged.
+        Map<String, Integer> existingCounts = buildExistingEntryCounts(walletId, userId);
+
         AtomicInteger imported = new AtomicInteger();
+        AtomicInteger duplicates = new AtomicInteger();
         Map<String, Integer> skippedByType = new LinkedHashMap<>();
         List<String> errors = new java.util.ArrayList<>();
 
@@ -84,9 +94,18 @@ public class B3StatementImportService {
                 continue;
             }
 
+            String ticker = extractTicker(row.product());
+            String type = row.credit() ? "BUY" : "SELL";
+            String key = entryKey(ticker, row.date(), row.quantity(), row.unitPrice(), type);
+
+            Integer remaining = existingCounts.get(key);
+            if (remaining != null && remaining > 0) {
+                existingCounts.put(key, remaining - 1); // consume one matching existing trade
+                duplicates.incrementAndGet();
+                continue;
+            }
+
             try {
-                String ticker = extractTicker(row.product());
-                String type = row.credit() ? "BUY" : "SELL";
                 AddEntryRequest request = new AddEntryRequest(row.date(), row.quantity(), row.unitPrice(), type);
                 walletService.addEntry(walletId, ticker, request, userId);
                 imported.incrementAndGet();
@@ -96,7 +115,33 @@ public class B3StatementImportService {
         }
 
         int skipped = skippedByType.values().stream().mapToInt(Integer::intValue).sum();
-        return new B3ImportResult(imported.get(), skipped, skippedByType, errors);
+        return new B3ImportResult(imported.get(), duplicates.get(), skipped, skippedByType, errors);
+    }
+
+    /** Multiset of the trades already recorded in the wallet, keyed exactly like incoming rows. */
+    private Map<String, Integer> buildExistingEntryCounts(String walletId, String userId) {
+        Map<String, Integer> counts = new java.util.HashMap<>();
+        var wallet = walletService.requireOwned(walletId, userId);
+        for (var position : wallet.positions()) {
+            for (var entry : position.entries()) {
+                if (entry.quantity() == null || entry.paidPrice() == null) continue;
+                String type = entry.typeOrBuy().name();
+                String key = entryKey(position.ticker(), entry.date(), entry.quantity(), entry.paidPrice(), type);
+                counts.merge(key, 1, Integer::sum);
+            }
+        }
+        return counts;
+    }
+
+    /**
+     * Canonical dedup key. Quantities/prices are compared at the DB column scales (qty numeric(19,8),
+     * price numeric(19,4)) so a statement value with extra decimals still matches the value the wallet
+     * rounded and stored on a previous import.
+     */
+    private String entryKey(String ticker, LocalDate date, BigDecimal quantity, BigDecimal price, String type) {
+        String q = quantity.setScale(8, java.math.RoundingMode.HALF_UP).toPlainString();
+        String p = price.setScale(4, java.math.RoundingMode.HALF_UP).toPlainString();
+        return ticker.toUpperCase(Locale.ROOT) + "|" + date + "|" + q + "|" + p + "|" + type;
     }
 
     private List<StatementRow> readRows(Workbook workbook) {
@@ -187,5 +232,6 @@ public class B3StatementImportService {
     private record StatementRow(LocalDate date, String movementType, String product,
                                  BigDecimal quantity, BigDecimal unitPrice, boolean credit) {}
 
-    public record B3ImportResult(int imported, int skipped, Map<String, Integer> skippedByType, List<String> errors) {}
+    public record B3ImportResult(int imported, int duplicates, int skipped,
+                                 Map<String, Integer> skippedByType, List<String> errors) {}
 }

@@ -27,6 +27,10 @@ public class WalletJpaEntity {
     @Column(name = "user_id")
     private String userId;
 
+    /** MANUAL or B3 — default keeps existing rows valid when the column is added. */
+    @Column(name = "source", nullable = false, length = 20, columnDefinition = "varchar(20) default 'MANUAL'")
+    private String source;
+
     @OneToMany(mappedBy = "wallet", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<WalletPositionJpaEntity> positions = new ArrayList<>();
 

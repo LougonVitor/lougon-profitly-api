@@ -68,7 +68,9 @@ public class WalletController {
             @AuthenticationPrincipal String userId
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(WalletSummaryResponse.from(walletService.create(request.name(), userId)));
+                .body(WalletSummaryResponse.from(walletService.create(
+                        request.name(), userId,
+                        tech.lougon.profitly.wallet.domain.model.WalletSource.fromNullable(request.source()))));
     }
 
     @PostMapping("/{walletId}/import/b3")

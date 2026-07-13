@@ -8,5 +8,14 @@ public record Wallet(
         String name,
         String userId,
         List<WalletPosition> positions,
-        Instant createdAt
-) {}
+        Instant createdAt,
+        WalletSource source
+) {
+    public WalletSource sourceOrManual() {
+        return source != null ? source : WalletSource.MANUAL;
+    }
+
+    public boolean isB3() {
+        return sourceOrManual() == WalletSource.B3;
+    }
+}

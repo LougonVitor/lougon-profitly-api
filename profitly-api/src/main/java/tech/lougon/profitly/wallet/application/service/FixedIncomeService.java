@@ -159,7 +159,7 @@ public class FixedIncomeService {
     }
 
     private WalletSummaryDTO save(Wallet wallet, List<WalletPosition> updatedPositions) {
-        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt());
+        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt(), wallet.source());
         Wallet saved = walletRepository.save(updated);
         return walletMapper.toSummaryDTO(saved, walletService.resolveMarketData(saved));
     }

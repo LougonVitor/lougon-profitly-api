@@ -65,14 +65,18 @@ public class WalletService {
     }
 
     public WalletSummaryDTO create(String name, String userId) {
-        Wallet wallet = new Wallet(null, name, userId, List.of(), Instant.now());
+        return create(name, userId, tech.lougon.profitly.wallet.domain.model.WalletSource.MANUAL);
+    }
+
+    public WalletSummaryDTO create(String name, String userId, tech.lougon.profitly.wallet.domain.model.WalletSource source) {
+        Wallet wallet = new Wallet(null, name, userId, List.of(), Instant.now(), source);
         Wallet saved = walletRepository.save(wallet);
         return walletMapper.toSummaryDTO(saved, Map.of());
     }
 
     public WalletSummaryDTO rename(String walletId, String name, String userId) {
         Wallet wallet = requireOwned(walletId, userId);
-        Wallet renamed = new Wallet(wallet.id(), name, wallet.userId(), wallet.positions(), wallet.createdAt());
+        Wallet renamed = new Wallet(wallet.id(), name, wallet.userId(), wallet.positions(), wallet.createdAt(), wallet.source());
         Wallet saved = walletRepository.save(renamed);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
@@ -134,7 +138,7 @@ public class WalletService {
             ((ArrayList<WalletPosition>) updatedPositions).add(newPosition);
         }
 
-        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt());
+        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt(), wallet.source());
         Wallet saved = walletRepository.save(updated);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
@@ -166,7 +170,7 @@ public class WalletService {
                 })
                 .toList();
 
-        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt());
+        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt(), wallet.source());
         Wallet saved = walletRepository.save(updated);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
@@ -185,7 +189,7 @@ public class WalletService {
                 .filter(position -> !position.entries().isEmpty())
                 .toList();
 
-        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt());
+        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt(), wallet.source());
         Wallet saved = walletRepository.save(updated);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }
@@ -197,7 +201,7 @@ public class WalletService {
                 .filter(p -> !p.ticker().equalsIgnoreCase(ticker))
                 .toList();
 
-        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt());
+        Wallet updated = new Wallet(wallet.id(), wallet.name(), wallet.userId(), updatedPositions, wallet.createdAt(), wallet.source());
         Wallet saved = walletRepository.save(updated);
         return walletMapper.toSummaryDTO(saved, resolveMarketData(saved));
     }

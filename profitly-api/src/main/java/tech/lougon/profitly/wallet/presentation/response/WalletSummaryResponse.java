@@ -15,6 +15,7 @@ public record WalletSummaryResponse(
         BigDecimal profitOrLoss,
         BigDecimal profitOrLossPercent,
         BigDecimal realizedProfitOrLoss,
+        String source,
         Instant createdAt
 ) {
     public static WalletSummaryResponse from(WalletSummaryDTO dto) {
@@ -27,6 +28,7 @@ public record WalletSummaryResponse(
                 dto.profitOrLoss(),
                 dto.profitOrLossPercent(),
                 dto.realizedProfitOrLoss(),
+                dto.source(),
                 dto.createdAt()
         );
     }

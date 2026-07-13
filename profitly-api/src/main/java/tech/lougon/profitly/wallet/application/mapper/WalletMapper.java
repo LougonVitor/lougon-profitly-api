@@ -60,6 +60,7 @@ public class WalletMapper {
                 profitOrLoss,
                 profitOrLossPercent,
                 realized,
+                wallet.sourceOrManual().name(),
                 wallet.createdAt()
         );
     }
