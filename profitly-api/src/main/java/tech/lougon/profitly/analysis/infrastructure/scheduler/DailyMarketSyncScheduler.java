@@ -6,13 +6,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.infrastructure.startup.IbovespaSyncScheduler;
 import tech.lougon.profitly.analysis.infrastructure.startup.PriceHistorySyncScheduler;
-import tech.lougon.profitly.news.infrastructure.scheduler.NewsSyncScheduler;
 import tech.lougon.profitly.ticker.infrastructure.scheduler.TickerSyncScheduler;
 
 /**
- * Runs the daily market-data pipeline from one clock. Ordering matters: the ticker
- * catalog is refreshed before the specialised synchronizers consume it, while a
- * single trigger prevents the independent jobs from competing for BRAPI limits.
+ * Runs the market-data pipeline (12h/18h/21h BRT) from one clock. Ordering matters:
+ * the ticker catalog is refreshed before the specialised synchronizers consume it,
+ * while a single trigger prevents the independent jobs from competing for BRAPI limits.
  */
 @Component
 public class DailyMarketSyncScheduler {
@@ -28,7 +27,6 @@ public class DailyMarketSyncScheduler {
     private final MacroIndexSyncScheduler macroSync;
     private final PriceHistorySyncScheduler walletPriceSync;
     private final IbovespaSyncScheduler ibovespaSync;
-    private final NewsSyncScheduler newsSync;
 
     public DailyMarketSyncScheduler(TickerSyncScheduler tickerSync,
                                     FiiIndicatorSyncScheduler fiiSync,
@@ -38,8 +36,7 @@ public class DailyMarketSyncScheduler {
                                     StockAnalysisSyncScheduler stockSync,
                                     MacroIndexSyncScheduler macroSync,
                                     PriceHistorySyncScheduler walletPriceSync,
-                                    IbovespaSyncScheduler ibovespaSync,
-                                    NewsSyncScheduler newsSync) {
+                                    IbovespaSyncScheduler ibovespaSync) {
         this.tickerSync = tickerSync;
         this.fiiSync = fiiSync;
         this.fundSync = fundSync;
@@ -49,12 +46,12 @@ public class DailyMarketSyncScheduler {
         this.macroSync = macroSync;
         this.walletPriceSync = walletPriceSync;
         this.ibovespaSync = ibovespaSync;
-        this.newsSync = newsSync;
     }
 
-    @Scheduled(cron = "0 0 18 * * *", zone = "America/Sao_Paulo")
+    // News runs on its own 30-min cadence (NewsSyncScheduler) — not part of this BRAPI pipeline.
+    @Scheduled(cron = "0 0 12,18,21 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
-        log.info("Daily 18h market sync started");
+        log.info("Market sync started");
         run("tickers", tickerSync::scheduledSync);
         run("FIIs", fiiSync::syncAll);
         run("funds", fundSync::syncAll);
@@ -64,18 +61,17 @@ public class DailyMarketSyncScheduler {
         run("macro indexes", macroSync::syncAll);
         run("wallet price history and dividends", walletPriceSync::scheduledSync);
         run("Ibovespa", ibovespaSync::syncAllRanges);
-        run("news", newsSync::sync);
-        log.info("Daily 18h market sync finished");
+        log.info("Market sync finished");
     }
 
     private void run(String name, Runnable task) {
         try {
-            log.info("Daily 18h sync: starting {}", name);
+            log.info("Market sync: starting {}", name);
             task.run();
-            log.info("Daily 18h sync: finished {}", name);
+            log.info("Market sync: finished {}", name);
         } catch (Exception e) {
-            // One failed provider/module must not stop the rest of the daily run.
-            log.error("Daily 18h sync: {} failed", name, e);
+            // One failed provider/module must not stop the rest of the run.
+            log.error("Market sync: {} failed", name, e);
         }
     }
 }
