@@ -20,6 +20,11 @@ public class IbovespaService {
 
     private static final Logger log = LoggerFactory.getLogger(IbovespaService.class);
     private static final String IBOV_SYMBOL = "^BVSP";
+    // Benchmark indices served from this cache. IBOV is the Dashboard widget and the
+    // stock "vs IBOV" chart; IFIX is the FII "vs IFIX" chart. brapi historical symbols.
+    private static final java.util.Map<String, String> INDEX_SYMBOLS = java.util.Map.of(
+            "ibov", IBOV_SYMBOL,
+            "ifix", "IFIX.SA");
     // Cache keys are brapi ranges (Yahoo-style suffixes). Covers both the Dashboard
     // IBOV widget (1d/5d/1mo/6mo/1y/5y) and the ticker "vs IBOV" chart (which uses
     // the same 1m/3m/6m/1y/2y/5y/10y/max vocabulary as stock price history —
@@ -41,36 +46,48 @@ public class IbovespaService {
     }
 
     public IbovespaResponse fetch(String range) {
-        String key = RANGE_ALIASES.getOrDefault(range, range);
+        return fetch(range, "ibov");
+    }
+
+    public IbovespaResponse fetch(String range, String index) {
+        String key = cacheKey(index, RANGE_ALIASES.getOrDefault(range, range));
         return cacheRepository.findById(key)
                 .map(this::fromEntity)
                 .orElseGet(() -> new IbovespaResponse(0, 0, 0, 0, List.of()));
     }
 
     public void syncAll() {
-        for (String range : ALL_RANGES) {
-            try {
-                syncRange(range);
-            } catch (Exception e) {
-                log.warn("Ibovespa sync failed for range {}: {}", range, e.getMessage());
+        for (String index : INDEX_SYMBOLS.keySet()) {
+            for (String range : ALL_RANGES) {
+                try {
+                    syncRange(index, range);
+                } catch (Exception e) {
+                    log.warn("{} sync failed for range {}: {}", index, range, e.getMessage());
+                }
             }
         }
     }
 
     public void syncIntraday() {
         try {
-            syncRange("1d");
+            syncRange("ibov", "1d");
         } catch (Exception e) {
             log.warn("Ibovespa intraday sync failed: {}", e.getMessage());
         }
     }
 
-    private void syncRange(String range) {
+    // IBOV rows keep their bare range as PK (pre-existing cache); other indices are namespaced.
+    private String cacheKey(String index, String range) {
+        return "ibov".equals(index) ? range : index + ":" + range;
+    }
+
+    private void syncRange(String index, String range) {
+        String symbol = INDEX_SYMBOLS.getOrDefault(index, IBOV_SYMBOL);
         String interval = "1d".equals(range) ? "5m" : "1d";
-        List<BrapiHistoricalResponse.PriceBar> raw = client.fetchHistoryWithInterval(IBOV_SYMBOL, range, interval);
+        List<BrapiHistoricalResponse.PriceBar> raw = client.fetchHistoryWithInterval(symbol, range, interval);
 
         if (raw.isEmpty()) {
-            log.warn("Ibovespa: no data returned for range {}", range);
+            log.warn("{}: no data returned for range {}", index, range);
             return;
         }
 
@@ -99,12 +116,13 @@ public class IbovespaService {
         try {
             pointsJson = objectMapper.writeValueAsString(points);
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize Ibovespa points for range {}", range, e);
+            log.error("Failed to serialize {} points for range {}", index, range, e);
             return;
         }
 
-        IbovespaCacheEntity entity = cacheRepository.findById(range)
-                .orElseGet(() -> new IbovespaCacheEntity(range, 0, 0, 0, 0, "[]", Instant.now()));
+        String key = cacheKey(index, range);
+        IbovespaCacheEntity entity = cacheRepository.findById(key)
+                .orElseGet(() -> new IbovespaCacheEntity(key, 0, 0, 0, 0, "[]", Instant.now()));
         entity.setCurrentPrice(currentPrice);
         entity.setChangePercent(changePercent);
         entity.setPreviousClose(previousClose);
@@ -113,7 +131,7 @@ public class IbovespaService {
         entity.setSyncedAt(Instant.now());
 
         cacheRepository.save(entity);
-        log.info("Ibovespa cache updated for range={} price={}", range, currentPrice);
+        log.info("{} cache updated for range={} price={}", index, range, currentPrice);
     }
 
     private IbovespaResponse fromEntity(IbovespaCacheEntity e) {

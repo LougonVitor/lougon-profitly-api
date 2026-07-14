@@ -17,7 +17,8 @@ public class IbovespaController {
 
     @GetMapping
     public ResponseEntity<IbovespaResponse> get(
-            @RequestParam(defaultValue = "1d") String range) {
-        return ResponseEntity.ok(service.fetch(range));
+            @RequestParam(defaultValue = "1d") String range,
+            @RequestParam(defaultValue = "ibov") String index) {
+        return ResponseEntity.ok(service.fetch(range, index));
     }
 }
