@@ -20,10 +20,15 @@ public class IbovespaService {
 
     private static final Logger log = LoggerFactory.getLogger(IbovespaService.class);
     private static final String IBOV_SYMBOL = "^BVSP";
-    // Must be valid brapi ranges (Yahoo-style suffixes) AND match the keys the
-    // frontend requests — the range string is both the brapi query param and the
-    // cache key, so any mismatch yields an empty chart.
-    private static final List<String> ALL_RANGES = List.of("1d", "5d", "1mo", "6mo", "1y", "5y");
+    // Cache keys are brapi ranges (Yahoo-style suffixes). Covers both the Dashboard
+    // IBOV widget (1d/5d/1mo/6mo/1y/5y) and the ticker "vs IBOV" chart (which uses
+    // the same 1m/3m/6m/1y/2y/5y/10y/max vocabulary as stock price history —
+    // normalized to these keys in fetch(), see RANGE_ALIASES).
+    private static final List<String> ALL_RANGES =
+            List.of("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max");
+    // Maps the ticker page's stock-history-style range values to the brapi/cache keys above.
+    private static final java.util.Map<String, String> RANGE_ALIASES =
+            java.util.Map.of("1m", "1mo", "3m", "3mo", "6m", "6mo");
 
     private final BrapiAnalysisClient client;
     private final JpaIbovespaCacheRepository cacheRepository;
@@ -36,7 +41,8 @@ public class IbovespaService {
     }
 
     public IbovespaResponse fetch(String range) {
-        return cacheRepository.findById(range)
+        String key = RANGE_ALIASES.getOrDefault(range, range);
+        return cacheRepository.findById(key)
                 .map(this::fromEntity)
                 .orElseGet(() -> new IbovespaResponse(0, 0, 0, 0, List.of()));
     }
