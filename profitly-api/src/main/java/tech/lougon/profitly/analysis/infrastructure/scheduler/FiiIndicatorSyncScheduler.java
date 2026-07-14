@@ -56,9 +56,6 @@ public class FiiIndicatorSyncScheduler {
     private static final String DIVIDEND_BACKFILL_START = "2016-01-01";
     private static final String PRICE_BACKFILL_START = "2015-01-01";
 
-    /** brapi's /fii/list has no per-fund logo field — fall back to their generic icon. */
-    private static final String FALLBACK_LOGO_URL = "https://icons.brapi.dev/icons/BRAPI.svg";
-
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JpaTickerRepository tickerRepo;
@@ -146,9 +143,6 @@ public class FiiIndicatorSyncScheduler {
         ticker.setIsActive(true);
         if (item.price() != null) {
             ticker.setLastPrice(BigDecimal.valueOf(item.price()));
-        }
-        if (ticker.getLogoUrl() == null || ticker.getLogoUrl().isBlank()) {
-            ticker.setLogoUrl(FALLBACK_LOGO_URL);
         }
         ticker.setSyncedAt(Instant.now());
         tickerRepo.save(ticker);
