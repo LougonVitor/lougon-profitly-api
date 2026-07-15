@@ -219,15 +219,14 @@ public class FiiIndicatorSyncScheduler {
                 }
                 Instant now = Instant.now();
                 for (var d : dividends) {
-                    String paymentDate = normalizeDate(d.paymentDate());
-                    String key = dividendKey(symbol, paymentDate, d.rate());
+                    String key = dividendKey(symbol, d.paymentDate(), d.rate());
                     if (existing.contains(key)) continue;
 
                     var entity = new FiiDividendEventJpaEntity();
                     entity.setSymbol(symbol);
                     entity.setLabel(d.label());
                     entity.setRate(d.rate());
-                    entity.setPaymentDate(paymentDate);
+                    entity.setPaymentDate(normalizeDate(d.paymentDate()));
                     entity.setLastDatePrior(normalizeDate(d.lastDatePrior()));
                     entity.setApprovedOn(normalizeDate(d.approvedOn()));
                     entity.setRelatedTo(d.relatedTo());
@@ -440,8 +439,15 @@ public class FiiIndicatorSyncScheduler {
         return saved;
     }
 
+    /**
+     * Dates are normalized into the key because the two dividend sources format them
+     * differently — /fii/dividends returns "2026-05-29 00:00:00+00" while the legacy
+     * fallback returns a plain date. A fund that gains vertical coverage after being
+     * seeded by the legacy path would otherwise miss every existing row and re-insert
+     * its whole payout history.
+     */
     private static String dividendKey(String symbol, String paymentDate, Double rate) {
-        return symbol + "|" + paymentDate + "|" + rate;
+        return symbol + "|" + normalizeDate(paymentDate) + "|" + rate;
     }
 
     // ── Raw documents (properties / portfolio, current + quarterly history) ──
