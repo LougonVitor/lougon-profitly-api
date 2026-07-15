@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -207,20 +208,31 @@ public class FiiIndicatorSyncScheduler {
     private void syncLegacyDividends(List<String> symbols) {
         int saved = 0;
         int withData = 0;
+        int restamped = 0;
         for (String symbol : symbols) {
             try {
                 List<BrapiDividendsResponse.CashDividend> dividends = brapiClient.fetchLegacyDividends(symbol);
                 if (dividends.isEmpty()) continue;
                 withData++;
 
-                Set<String> existing = new HashSet<>();
+                Map<String, FiiDividendEventJpaEntity> existing = new HashMap<>();
                 for (FiiDividendEventJpaEntity d : dividendRepo.findBySymbolOrderByPaymentDateDesc(symbol)) {
-                    existing.add(dividendKey(d.getSymbol(), d.getPaymentDate(), d.getRate()));
+                    existing.put(dividendKey(d.getSymbol(), d.getPaymentDate(), d.getRate()), d);
                 }
                 Instant now = Instant.now();
                 for (var d : dividends) {
                     String key = dividendKey(symbol, d.paymentDate(), d.rate());
-                    if (existing.contains(key)) continue;
+                    FiiDividendEventJpaEntity stored = existing.get(key);
+                    if (stored != null) {
+                        // Rows written before `source` existed default to VERTICAL — restamp them
+                        // here so the split-unsafe metrics get suppressed without a manual backfill
+                        if (!"LEGACY".equals(stored.getSource())) {
+                            stored.setSource("LEGACY");
+                            dividendRepo.save(stored);
+                            restamped++;
+                        }
+                        continue;
+                    }
 
                     var entity = new FiiDividendEventJpaEntity();
                     entity.setSymbol(symbol);
@@ -231,16 +243,18 @@ public class FiiIndicatorSyncScheduler {
                     entity.setApprovedOn(normalizeDate(d.approvedOn()));
                     entity.setRelatedTo(d.relatedTo());
                     entity.setIsinCode(d.isinCode());
+                    entity.setSource("LEGACY");
                     entity.setSyncedAt(now);
                     dividendRepo.save(entity);
-                    existing.add(key);
+                    existing.put(key, entity);
                     saved++;
                 }
             } catch (Exception e) {
                 log.warn("Failed legacy dividend sync for {}: {}", symbol, e.getMessage());
             }
         }
-        log.info("Legacy FII dividends: {} new events across {}/{} orphans", saved, withData, symbols.size());
+        log.info("Legacy FII dividends: {} new events, {} restamped, across {}/{} orphans",
+                saved, restamped, withData, symbols.size());
     }
 
     private void upsertTicker(BrapiFiiListResponse.FiiListItem item) {
@@ -427,6 +441,7 @@ public class FiiIndicatorSyncScheduler {
                     entity.setApprovedOn(d.approvedOn());
                     entity.setRelatedTo(d.relatedTo());
                     entity.setIsinCode(d.isinCode());
+                    entity.setSource("VERTICAL");
                     entity.setSyncedAt(now);
                     dividendRepo.save(entity);
                     existing.add(key);

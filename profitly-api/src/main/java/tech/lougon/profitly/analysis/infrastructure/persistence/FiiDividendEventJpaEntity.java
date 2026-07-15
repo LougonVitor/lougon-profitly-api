@@ -36,10 +36,23 @@ public class FiiDividendEventJpaEntity {
     @Column(name = "isin_code", length = 20)
     private String isinCode;
 
+    /**
+     * Which brapi endpoint the event came from: "VERTICAL" (/fii/dividends) or
+     * "LEGACY" (/api/quote?dividends=true, the only source for FIIs missing from the
+     * FII vertical). Legacy rates are the amounts paid at the time and are NOT
+     * split-adjusted, while prices are adjusted retroactively — so any yield that
+     * spans a split is meaningless for legacy rows and gets suppressed.
+     */
+    @Column(name = "source", length = 10, columnDefinition = "varchar(10) default 'VERTICAL'")
+    private String source;
+
     @Column(name = "synced_at", nullable = false)
     private Instant syncedAt;
 
     public FiiDividendEventJpaEntity() {}
+
+    public String getSource() { return source; }
+    public void setSource(String v) { this.source = v; }
 
     public Long getId() { return id; }
     public String getSymbol() { return symbol; }

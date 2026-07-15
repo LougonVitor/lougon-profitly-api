@@ -129,6 +129,15 @@ public class FiiAnalysisService {
             dividendYield1m = round2(lastDividend / fii.getPrice() * 100.0);
         }
 
+        // 12m DY: only /fii/indicators reports it, so FIIs outside the brapi FII vertical have
+        // none — derive it from the payouts like 3m/6m above. The 12m window is recent enough
+        // to sit on one side of a split, so it stays valid for unadjusted legacy rates.
+        Double dividendYield12m = pct(fii.getDividendYield12m());
+        if ((dividendYield12m == null || dividendYield12m == 0.0)
+                && dividendsSum12m > 0 && fii.getPrice() != null && fii.getPrice() > 0) {
+            dividendYield12m = round2(dividendsSum12m / fii.getPrice() * 100.0);
+        }
+
         // DY médio 5 anos: the average yearly payout over the last 5 completed years measured
         // against the CURRENT price — "if I buy today, what average yield have the last years
         // paid" (this is how Investidor10 quotes it). Uses each year's total dividends.
@@ -147,7 +156,13 @@ public class FiiAnalysisService {
             Double dv = yearDividends.get(y);
             if (dv != null && dv > 0) { sum5y += dv; yearsCounted++; }
         }
-        if (yearsCounted > 0 && fii.getPrice() != null && fii.getPrice() > 0) {
+        // Legacy rates are the amounts paid at the time and are NOT split-adjusted, while
+        // the price is adjusted retroactively — a multi-year average against today's price
+        // is off by the split factor (BTCI11 read 51% against a real ~12%). brapi exposes no
+        // split data for these funds, so the metric is dropped rather than shown wrong. The
+        // 1m/3m/6m/12m yields are unaffected: they only span recent, post-split payouts.
+        boolean legacyRates = dividends.stream().anyMatch(d -> "LEGACY".equals(d.getSource()));
+        if (yearsCounted > 0 && !legacyRates && fii.getPrice() != null && fii.getPrice() > 0) {
             avgDividendYield = round2((sum5y / yearsCounted) / fii.getPrice() * 100.0);
         }
 
@@ -330,7 +345,7 @@ public class FiiAnalysisService {
                 fii.getEquity(), fii.getTotalAssets(), fii.getTotalInvestors(), fii.getSharesOutstanding(),
                 fii.getAsOfDate(), fii.getSyncedAt(),
                 pct(fii.getMonthlyReturn()),
-                pct(fii.getDividendYield12m()), dividendYield1m,
+                dividendYield12m, dividendYield1m,
                 dividendCount12m > 0 ? round4(dividendsSum12m) : null,
                 dividendCount12m > 0 ? dividendCount12m : null,
                 lastDividend,
