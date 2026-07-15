@@ -9,9 +9,12 @@ import tech.lougon.profitly.ticker.infrastructure.client.dto.BrapiTickerResponse
 
 import java.time.Instant;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 public class TickerService {
+
+    private static final Pattern FRACTIONAL_SYMBOL = Pattern.compile(".*\\dF$");
 
     private final TickerRepository tickerRepository;
     private final BrapiClient brapiClient;
@@ -34,6 +37,7 @@ public class TickerService {
 
         for (BrapiTickerResponse.TickerItem item : items) {
             if (item.symbol() == null || item.symbol().isBlank()) continue;
+            if (FRACTIONAL_SYMBOL.matcher(item.symbol()).matches()) continue;
 
             BrapiTickerResponse.QuoteSummary q = item.quote();
             Ticker ticker = new Ticker(
