@@ -9,7 +9,7 @@ import tech.lougon.profitly.analysis.infrastructure.startup.PriceHistorySyncSche
 import tech.lougon.profitly.ticker.infrastructure.scheduler.TickerSyncScheduler;
 
 /**
- * Runs the market-data pipeline (12h/18h/21h BRT) from one clock. Ordering matters:
+ * Runs the market-data pipeline (13h/18h BRT) from one clock. Ordering matters:
  * the ticker catalog is refreshed before the specialised synchronizers consume it,
  * while a single trigger prevents the independent jobs from competing for BRAPI limits.
  */
@@ -49,7 +49,7 @@ public class DailyMarketSyncScheduler {
     }
 
     // News runs on its own 30-min cadence (NewsSyncScheduler) — not part of this BRAPI pipeline.
-    @Scheduled(cron = "0 0 12,18,21 * * *", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 0 13,18 * * *", zone = "America/Sao_Paulo")
     public void syncAll() {
         log.info("Market sync started");
         run("tickers", tickerSync::scheduledSync);
