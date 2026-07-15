@@ -51,10 +51,12 @@ public class ExpenseRepositoryImpl implements ExpenseRepository {
         entity.setId(e.id());
         entity.setUserId(e.userId());
         entity.setTitle(e.title());
+        entity.setDescription(e.description());
         entity.setEstimatedValue(e.estimatedValue());
         entity.setRealValue(e.realValue());
         entity.setStatus(e.status());
         entity.setType(e.type());
+        entity.setPaymentMethod(e.paymentMethod());
         entity.setCreatedAt(e.createdAt());
         entity.setRecurring(e.recurring());
         entity.setRecurringExpenseId(e.recurringExpenseId());
@@ -62,8 +64,9 @@ public class ExpenseRepositoryImpl implements ExpenseRepository {
     }
 
     private Expense toDomain(ExpenseJpaEntity e) {
-        return new Expense(e.getId(), e.getUserId(), e.getTitle(),
-                e.getEstimatedValue(), e.getRealValue(), e.getStatus(), e.getType(), e.getCreatedAt(),
+        return new Expense(e.getId(), e.getUserId(), e.getTitle(), e.getDescription(),
+                e.getEstimatedValue(), e.getRealValue(), e.getStatus(), e.getType(),
+                e.getPaymentMethod(), e.getCreatedAt(),
                 e.isRecurring(), e.getRecurringExpenseId());
     }
 }

@@ -20,6 +20,9 @@ public class FinanceSettingsJpaEntity {
     @Column(nullable = false, columnDefinition = "boolean default true")
     private boolean investmentAuto = true;
 
+    // Quanto o usuário pretende guardar por mês. Null = sem meta definida.
+    private BigDecimal savingsTarget;
+
     public FinanceSettingsJpaEntity() {}
 
     public String getUserId() { return userId; }
@@ -32,4 +35,6 @@ public class FinanceSettingsJpaEntity {
     public void setInvestmentTarget(BigDecimal investmentTarget) { this.investmentTarget = investmentTarget; }
     public boolean isInvestmentAuto() { return investmentAuto; }
     public void setInvestmentAuto(boolean investmentAuto) { this.investmentAuto = investmentAuto; }
+    public BigDecimal getSavingsTarget() { return savingsTarget; }
+    public void setSavingsTarget(BigDecimal savingsTarget) { this.savingsTarget = savingsTarget; }
 }

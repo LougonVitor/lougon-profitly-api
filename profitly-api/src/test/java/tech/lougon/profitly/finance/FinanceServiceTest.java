@@ -96,7 +96,7 @@ class FinanceServiceTest {
 
     @Test
     void currentPeriodComputesIncomeAndBalance() {
-        service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null, null));
+        service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null, null, null));
         service.addIncome(USER, new AddIncomeRequest("Freela", bd(1000)));
         addExpense("Mercado", bd(400), bd(400), ExpenseType.SUPERMARKET);
         addExpense("Luz", bd(200), bd(150), ExpenseType.HOME);
@@ -106,6 +106,36 @@ class FinanceServiceTest {
         assertThat(period.totalIncome()).isEqualByComparingTo(bd(6000));
         assertThat(period.totalReal()).isEqualByComparingTo(bd(550)); // 400 + 150 (+ investment 0)
         assertThat(period.balance()).isEqualByComparingTo(bd(5450));  // 6000 - 550
+    }
+
+    @Test
+    void totalSpentExcludesInvestmentAndSavedIsWhatIsLeft() {
+        investedStub = bd(1000);
+        service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null, null, bd(800)));
+        addExpense("Mercado", bd(400), bd(400), ExpenseType.SUPERMARKET);
+
+        CurrentPeriodDTO period = service.getCurrentPeriod(USER);
+
+        assertThat(period.totalReal()).isEqualByComparingTo(bd(1400));   // gasto + investimento
+        assertThat(period.totalSpent()).isEqualByComparingTo(bd(400));   // investir não é gastar
+        assertThat(period.investedReal()).isEqualByComparingTo(bd(1000));
+        assertThat(period.savedThisMonth()).isEqualByComparingTo(bd(3600)); // 5000 - 400 - 1000
+        assertThat(period.savingsTarget()).isEqualByComparingTo(bd(800));
+    }
+
+    @Test
+    void expenseKeepsDescriptionAndPaymentMethod() {
+        var created = service.addExpense(USER, new AddExpenseRequest("Netflix", "Plano família",
+                bd(40), bd(32), null, ExpenseType.SIGNATURE, PaymentMethod.CREDIT_CARD, false));
+
+        assertThat(created.description()).isEqualTo("Plano família");
+        assertThat(created.paymentMethod()).isEqualTo(PaymentMethod.CREDIT_CARD);
+
+        // Um PATCH que não menciona os campos não pode apagá-los.
+        var patched = service.updateExpense(USER, created.id(),
+                new UpdateExpenseRequest(null, null, null, bd(35), null, null, null));
+        assertThat(patched.description()).isEqualTo("Plano família");
+        assertThat(patched.paymentMethod()).isEqualTo(PaymentMethod.CREDIT_CARD);
     }
 
     @Test
@@ -131,11 +161,11 @@ class FinanceServiceTest {
     @Test
     void manualInvestmentModeKeepsTheEditedRealValue() {
         investedStub = bd(750);
-        service.updateSettings(USER, new FinanceSettingsRequest(10, null, null, false)); // switch to manual
+        service.updateSettings(USER, new FinanceSettingsRequest(10, null, null, false, null)); // switch to manual
 
         var inv = service.getCurrentPeriod(USER).expenses().stream()
                 .filter(e -> e.type() == ExpenseType.INVESTMENT).findFirst().orElseThrow();
-        service.updateExpense(USER, inv.id(), new UpdateExpenseRequest(null, null, bd(300), null, null));
+        service.updateExpense(USER, inv.id(), new UpdateExpenseRequest(null, null, null, bd(300), null, null, null));
 
         CurrentPeriodDTO period = service.getCurrentPeriod(USER);
         var inv2 = period.expenses().stream()
@@ -187,7 +217,7 @@ class FinanceServiceTest {
     @Test
     void checkAndResetDoesNothingWhenNotDue() {
         int notToday = java.time.LocalDate.now().getDayOfMonth() == 1 ? 2 : 1;
-        service.updateSettings(USER, new FinanceSettingsRequest(notToday, bd(1000), null, null));
+        service.updateSettings(USER, new FinanceSettingsRequest(notToday, bd(1000), null, null, null));
         addExpense("Mercado", bd(400), bd(400), ExpenseType.SUPERMARKET);
 
         boolean fired = service.checkAndResetIfDue(USER);
@@ -206,7 +236,7 @@ class FinanceServiceTest {
         Expense generated = expenses.findByUserId(USER).stream()
                 .filter(e -> e.title().equals("Aluguel")).findFirst().orElseThrow();
         service.updateExpense(USER, generated.id(),
-                new UpdateExpenseRequest(null, null, bd(1500), null, null)); // record payment
+                new UpdateExpenseRequest(null, null, null, bd(1500), null, null, null)); // record payment
 
         service.deleteRecurring(USER, tmpl.id());
 
@@ -276,7 +306,7 @@ class FinanceServiceTest {
         service.getCurrentPeriod(USER);
         var injected = expenses.findByUserId(USER).stream()
                 .filter(e -> tmpl.id().equals(e.recurringExpenseId())).findFirst().orElseThrow();
-        service.updateExpense(USER, injected.id(), new UpdateExpenseRequest(null, null, bd(1500), null, null));
+        service.updateExpense(USER, injected.id(), new UpdateExpenseRequest(null, null, null, bd(1500), null, null, null));
 
         service.updateRecurring(USER, tmpl.id(),
                 new RecurringExpenseRequest("Aluguel novo", bd(1600), ExpenseType.HOME, 5, false));
@@ -425,7 +455,7 @@ class FinanceServiceTest {
     // ── helpers ─────────────────────────────────────────────────────────────────
 
     private ExpenseDTO addExpense(String title, BigDecimal est, BigDecimal real, ExpenseType type) {
-        return service.addExpense(USER, new AddExpenseRequest(title, est, real, null, type, false));
+        return service.addExpense(USER, new AddExpenseRequest(title, null, est, real, null, type, null, false));
     }
 
     private static BigDecimal bd(long v) { return BigDecimal.valueOf(v); }
@@ -438,8 +468,9 @@ class FinanceServiceTest {
 
         public Expense save(Expense e) {
             Long id = e.id() != null ? e.id() : seq.incrementAndGet();
-            Expense saved = new Expense(id, e.userId(), e.title(), e.estimatedValue(), e.realValue(),
-                    e.status(), e.type(), e.createdAt(), e.recurring(), e.recurringExpenseId());
+            Expense saved = new Expense(id, e.userId(), e.title(), e.description(),
+                    e.estimatedValue(), e.realValue(), e.status(), e.type(), e.paymentMethod(),
+                    e.createdAt(), e.recurring(), e.recurringExpenseId());
             store.put(id, saved);
             return saved;
         }

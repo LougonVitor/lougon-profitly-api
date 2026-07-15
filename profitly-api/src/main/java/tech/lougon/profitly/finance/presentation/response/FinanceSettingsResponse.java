@@ -8,9 +8,11 @@ public record FinanceSettingsResponse(
         int resetDay,
         BigDecimal netSalary,
         BigDecimal investmentTarget,
-        boolean investmentAuto
+        boolean investmentAuto,
+        BigDecimal savingsTarget
 ) {
     public static FinanceSettingsResponse from(FinanceSettings s) {
-        return new FinanceSettingsResponse(s.resetDay(), s.netSalary(), s.investmentTarget(), s.investmentAuto());
+        return new FinanceSettingsResponse(s.resetDay(), s.netSalary(), s.investmentTarget(),
+                s.investmentAuto(), s.savingsTarget());
     }
 }

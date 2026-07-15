@@ -71,9 +71,9 @@ public class FinanceService {
             boolean alreadyPresent = linkedRecurringIds.contains(recurring.id())
                     || existingTitles.contains(recurring.title().toLowerCase());
             if (!alreadyPresent) {
-                var newExpense = new Expense(null, userId, recurring.title(),
+                var newExpense = new Expense(null, userId, recurring.title(), null,
                         recurring.estimatedValue(), BigDecimal.ZERO,
-                        ExpenseStatus.PENDING, recurring.type(), Instant.now(), true, recurring.id());
+                        ExpenseStatus.PENDING, recurring.type(), null, Instant.now(), true, recurring.id());
                 expenseRepository.save(newExpense);
             }
         }
@@ -83,9 +83,9 @@ public class FinanceService {
                 .filter(e -> e.type() == ExpenseType.INVESTMENT)
                 .toList();
         if (investmentExpenses.isEmpty()) {
-            var investmentExpense = new Expense(null, userId, "Investimento",
+            var investmentExpense = new Expense(null, userId, "Investimento", null,
                     null, BigDecimal.ZERO, ExpenseStatus.PENDING,
-                    ExpenseType.INVESTMENT, Instant.now(), true, null);
+                    ExpenseType.INVESTMENT, null, Instant.now(), true, null);
             expenseRepository.save(investmentExpense);
         }
 
@@ -125,10 +125,10 @@ public class FinanceService {
 
     public ExpenseDTO addExpense(String userId, AddExpenseRequest req) {
         BigDecimal realValue = req.realValue() != null ? req.realValue() : BigDecimal.ZERO;
-        var expense = new Expense(null, userId, req.title(),
+        var expense = new Expense(null, userId, req.title(), req.description(),
                 req.estimatedValue(), realValue,
                 computeStatus(realValue, req.estimatedValue()),
-                req.type(), Instant.now(), req.recurring(), null);
+                req.type(), req.paymentMethod(), Instant.now(), req.recurring(), null);
         return ExpenseDTO.from(expenseRepository.save(expense));
     }
 
@@ -141,7 +141,8 @@ public class FinanceService {
         ExpenseStatus status = computeStatus(newReal, estimated);
 
         var updated = new Expense(existing.id(), existing.userId(), existing.title(),
-                estimated, newReal, status, existing.type(), existing.createdAt(),
+                existing.description(), estimated, newReal, status, existing.type(),
+                existing.paymentMethod(), existing.createdAt(),
                 existing.recurring(), existing.recurringExpenseId());
         return ExpenseDTO.from(expenseRepository.save(updated));
     }
@@ -157,8 +158,10 @@ public class FinanceService {
 
         var updated = new Expense(id, userId,
                 req.title() != null ? req.title() : existing.title(),
+                req.description() != null ? req.description() : existing.description(),
                 estimated, realValue, status,
                 req.type() != null ? req.type() : existing.type(),
+                req.paymentMethod() != null ? req.paymentMethod() : existing.paymentMethod(),
                 existing.createdAt(), existing.recurring(), existing.recurringExpenseId());
         return ExpenseDTO.from(expenseRepository.save(updated));
     }
@@ -174,7 +177,8 @@ public class FinanceService {
         var settings = new FinanceSettings(userId,
                 req.resetDay() != null ? req.resetDay() : 10,
                 req.netSalary(), req.investmentTarget(),
-                req.investmentAuto() == null || req.investmentAuto());
+                req.investmentAuto() == null || req.investmentAuto(),
+                req.savingsTarget());
         return settingsRepository.save(settings);
     }
 
@@ -274,8 +278,9 @@ public class FinanceService {
         return expenses.stream().map(e -> {
             if (e.type() != ExpenseType.INVESTMENT) return e;
             if (e.realValue() != null && e.realValue().compareTo(invested) == 0) return e;
-            Expense updated = new Expense(e.id(), e.userId(), e.title(), e.estimatedValue(),
-                    invested, computeStatus(invested, e.estimatedValue()), e.type(), e.createdAt(),
+            Expense updated = new Expense(e.id(), e.userId(), e.title(), e.description(),
+                    e.estimatedValue(), invested, computeStatus(invested, e.estimatedValue()),
+                    e.type(), e.paymentMethod(), e.createdAt(),
                     e.recurring(), e.recurringExpenseId());
             return expenseRepository.save(updated);
         }).toList();
@@ -312,9 +317,9 @@ public class FinanceService {
                 .ifPresent(e -> {
                     if (e.realValue() == null || e.realValue().compareTo(BigDecimal.ZERO) == 0) {
                         expenseRepository.save(new Expense(e.id(), e.userId(), req.title(),
-                                req.estimatedValue(), e.realValue(),
+                                e.description(), req.estimatedValue(), e.realValue(),
                                 computeStatus(e.realValue(), req.estimatedValue()),
-                                req.type(), e.createdAt(), true, id));
+                                req.type(), e.paymentMethod(), e.createdAt(), true, id));
                     }
                 });
         return saved;
@@ -338,8 +343,8 @@ public class FinanceService {
                         expenseRepository.deleteById(e.id());
                     } else {
                         expenseRepository.save(new Expense(e.id(), e.userId(), e.title(),
-                                e.estimatedValue(), e.realValue(), e.status(), e.type(),
-                                e.createdAt(), false, null));
+                                e.description(), e.estimatedValue(), e.realValue(), e.status(),
+                                e.type(), e.paymentMethod(), e.createdAt(), false, null));
                     }
                 });
 
@@ -414,7 +419,9 @@ public class FinanceService {
     public String exportCurrentCsv(String userId) {
         var expenses = expenseRepository.findByUserId(userId);
         StringBuilder sb = new StringBuilder();
-        sb.append(CsvSupport.row("titulo", "tipo", "estimado", "real", "status", "recorrente")).append('\n');
+        // As 4 primeiras colunas são contrato do importador — colunas novas entram só no fim.
+        sb.append(CsvSupport.row("titulo", "tipo", "estimado", "real", "status", "recorrente",
+                "descricao", "forma_pagamento")).append('\n');
         for (Expense e : expenses) {
             sb.append(CsvSupport.row(
                     e.title(),
@@ -422,7 +429,9 @@ public class FinanceService {
                     e.estimatedValue() != null ? e.estimatedValue().toPlainString() : "",
                     e.realValue() != null ? e.realValue().toPlainString() : "0",
                     e.status().name(),
-                    String.valueOf(e.recurring()))).append('\n');
+                    String.valueOf(e.recurring()),
+                    e.description() != null ? e.description() : "",
+                    e.paymentMethod() != null ? e.paymentMethod().name() : "")).append('\n');
         }
         return sb.toString();
     }
@@ -476,11 +485,31 @@ public class FinanceService {
             BigDecimal estimated = parseMoney(cols, 2);
             BigDecimal real = parseMoney(cols, 3);
             BigDecimal realVal = real != null ? real : BigDecimal.ZERO;
-            expenseRepository.save(new Expense(null, userId, title, estimated, realVal,
-                    computeStatus(realVal, estimated), type, Instant.now(), false, null));
+            // Colunas 6 e 7 são opcionais: CSVs exportados antes delas existirem seguem válidos.
+            String description = optionalText(cols, 6);
+            PaymentMethod paymentMethod = parsePaymentMethod(cols, 7);
+            expenseRepository.save(new Expense(null, userId, title, description, estimated, realVal,
+                    computeStatus(realVal, estimated), type, paymentMethod, Instant.now(), false, null));
             imported++;
         }
         return imported;
+    }
+
+    private String optionalText(List<String> cols, int idx) {
+        if (idx >= cols.size()) return null;
+        String v = cols.get(idx).trim();
+        return v.isEmpty() ? null : v;
+    }
+
+    /** Forma de pagamento é opcional no CSV: valor desconhecido é ignorado em vez de barrar a linha. */
+    private PaymentMethod parsePaymentMethod(List<String> cols, int idx) {
+        String v = optionalText(cols, idx);
+        if (v == null) return null;
+        try {
+            return PaymentMethod.valueOf(v.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private BigDecimal parseMoney(List<String> cols, int idx) {
@@ -517,7 +546,7 @@ public class FinanceService {
 
     private FinanceSettings getOrCreateSettings(String userId) {
         return settingsRepository.findByUserId(userId)
-                .orElseGet(() -> settingsRepository.save(new FinanceSettings(userId, 10, null, null, true)));
+                .orElseGet(() -> settingsRepository.save(new FinanceSettings(userId, 10, null, null, true, null)));
     }
 
     private ExpenseStatus computeStatus(BigDecimal real, BigDecimal estimated) {

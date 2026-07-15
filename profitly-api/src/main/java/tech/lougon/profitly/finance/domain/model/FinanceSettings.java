@@ -7,5 +7,6 @@ public record FinanceSettings(
         int resetDay,
         BigDecimal netSalary,
         BigDecimal investmentTarget,
-        boolean investmentAuto
+        boolean investmentAuto,
+        BigDecimal savingsTarget
 ) {}

@@ -7,10 +7,12 @@ public record Expense(
         Long id,
         String userId,
         String title,
+        String description,
         BigDecimal estimatedValue,
         BigDecimal realValue,
         ExpenseStatus status,
         ExpenseType type,
+        PaymentMethod paymentMethod,
         Instant createdAt,
         boolean recurring,
         Long recurringExpenseId

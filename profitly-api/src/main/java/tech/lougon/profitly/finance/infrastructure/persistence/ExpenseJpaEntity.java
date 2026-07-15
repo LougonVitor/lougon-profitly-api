@@ -3,6 +3,7 @@ package tech.lougon.profitly.finance.infrastructure.persistence;
 import jakarta.persistence.*;
 import tech.lougon.profitly.finance.domain.model.ExpenseStatus;
 import tech.lougon.profitly.finance.domain.model.ExpenseType;
+import tech.lougon.profitly.finance.domain.model.PaymentMethod;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -21,6 +22,9 @@ public class ExpenseJpaEntity {
     @Column(nullable = false)
     private String title;
 
+    @Column(length = 500)
+    private String description;
+
     private BigDecimal estimatedValue;
 
     @Column(nullable = false)
@@ -33,6 +37,12 @@ public class ExpenseJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ExpenseType type;
+
+    // Optional: how the expense was paid. Null for rows created before this column existed
+    // and for the derived investment row.
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private PaymentMethod paymentMethod;
 
     @Column(nullable = false)
     private Instant createdAt;
@@ -52,6 +62,8 @@ public class ExpenseJpaEntity {
     public void setUserId(String userId) { this.userId = userId; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
     public BigDecimal getEstimatedValue() { return estimatedValue; }
     public void setEstimatedValue(BigDecimal estimatedValue) { this.estimatedValue = estimatedValue; }
     public BigDecimal getRealValue() { return realValue; }
@@ -60,6 +72,8 @@ public class ExpenseJpaEntity {
     public void setStatus(ExpenseStatus status) { this.status = status; }
     public ExpenseType getType() { return type; }
     public void setType(ExpenseType type) { this.type = type; }
+    public PaymentMethod getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(PaymentMethod paymentMethod) { this.paymentMethod = paymentMethod; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public boolean isRecurring() { return recurring; }
