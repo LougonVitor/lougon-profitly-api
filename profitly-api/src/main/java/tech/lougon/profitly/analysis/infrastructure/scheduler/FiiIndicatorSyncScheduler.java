@@ -174,6 +174,7 @@ public class FiiIndicatorSyncScheduler {
             if (item.symbol() == null || inVertical.contains(item.symbol())) continue;
             try {
                 seedOrphan(item);
+                upsertOrphanTicker(item);
                 orphans.add(item.symbol());
             } catch (Exception e) {
                 log.warn("Failed to seed orphan FII {}: {}", item.symbol(), e.getMessage());
@@ -194,6 +195,30 @@ public class FiiIndicatorSyncScheduler {
         }
         entity.setSyncedAt(Instant.now());
         indicatorRepo.save(entity);
+    }
+
+    /**
+     * The orphans need a tickers row of their own: the general catalog sync only walks
+     * stock/unit/bdr/fidc/fip (see BrapiClient.GENERAL_SUB_TYPES) and upsertTicker above
+     * only runs for /fii/list members, so nothing else writes them. Without this row the
+     * fund is unreachable — search can't find it and the front resolves the FII page off
+     * the ticker's assetType. Seeds assetType=FII like the vertical does; segmentType is
+     * left alone because /fii/indicators 404s for these funds, so the segment is unknown.
+     */
+    private void upsertOrphanTicker(BrapiTickerResponse.TickerItem item) {
+        TickerJpaEntity ticker = tickerRepo.findBySymbol(item.symbol())
+                .orElseGet(TickerJpaEntity::new);
+
+        ticker.setSymbol(item.symbol());
+        ticker.setName(item.name() != null ? item.name() : item.symbol());
+        ticker.setLongName(item.longName() != null ? item.longName() : ticker.getName());
+        ticker.setAssetType("FII");
+        ticker.setIsActive(item.isActive() == null || item.isActive());
+        if (item.quote() != null && item.quote().lastPrice() != null) {
+            ticker.setLastPrice(item.quote().lastPrice());
+        }
+        ticker.setSyncedAt(Instant.now());
+        tickerRepo.save(ticker);
     }
 
     /**
