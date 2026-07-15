@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import tech.lougon.profitly.analysis.domain.model.PricePoint;
 import tech.lougon.profitly.analysis.domain.repository.PriceHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.client.BrapiAnalysisClient;
+import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiDividendsResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiHistoricalResponse;
 import tech.lougon.profitly.analysis.infrastructure.client.dto.BrapiFiiIndicatorsHistoryResponse;
@@ -24,6 +25,8 @@ import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiDividendEv
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiDocumentRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorHistoryRepository;
 import tech.lougon.profitly.analysis.infrastructure.persistence.JpaFiiIndicatorRepository;
+import tech.lougon.profitly.ticker.infrastructure.client.BrapiClient;
+import tech.lougon.profitly.ticker.infrastructure.client.dto.BrapiTickerResponse;
 import tech.lougon.profitly.ticker.infrastructure.persistence.JpaTickerRepository;
 import tech.lougon.profitly.ticker.infrastructure.persistence.TickerJpaEntity;
 
@@ -65,6 +68,7 @@ public class FiiIndicatorSyncScheduler {
     private final JpaFiiDocumentRepository documentRepo;
     private final PriceHistoryRepository priceHistoryRepository;
     private final BrapiAnalysisClient brapiClient;
+    private final BrapiClient tickerClient;
 
     public FiiIndicatorSyncScheduler(JpaTickerRepository tickerRepo,
                                      JpaFiiIndicatorRepository indicatorRepo,
@@ -72,7 +76,8 @@ public class FiiIndicatorSyncScheduler {
                                      JpaFiiDividendEventRepository dividendRepo,
                                      JpaFiiDocumentRepository documentRepo,
                                      PriceHistoryRepository priceHistoryRepository,
-                                     BrapiAnalysisClient brapiClient) {
+                                     BrapiAnalysisClient brapiClient,
+                                     BrapiClient tickerClient) {
         this.tickerRepo = tickerRepo;
         this.indicatorRepo = indicatorRepo;
         this.historyRepo = historyRepo;
@@ -80,6 +85,7 @@ public class FiiIndicatorSyncScheduler {
         this.documentRepo = documentRepo;
         this.priceHistoryRepository = priceHistoryRepository;
         this.brapiClient = brapiClient;
+        this.tickerClient = tickerClient;
     }
 
     @Value("${profitly.sync.on-startup:false}")
@@ -121,13 +127,121 @@ public class FiiIndicatorSyncScheduler {
         }
         log.info("FII catalog synced: {}/{} tickers", synced.size(), allFiis.size());
 
+        List<String> orphans = seedOrphanFiis(synced);
+
+        // Vertical-only phases: these endpoints 404 for the orphans, so they get `synced` only
         syncIndicators(synced);
         syncIndicatorHistories(synced);
         syncDividends(synced);
         syncDocuments(synced);
-        syncPriceHistories(synced);
-        updateTickerDailyChanges(synced);
+
+        // /fii/historical DOES serve the orphans even though /fii/list omits them
+        List<String> all = new ArrayList<>(synced);
+        all.addAll(orphans);
+        syncPriceHistories(all);
+        syncLegacyDividends(orphans);
+        updateTickerDailyChanges(all);
         log.info("FII sync complete");
+    }
+
+    // ── FIIs missing from the /fii/* vertical ────────────────────────────────
+
+    /**
+     * brapi keeps two disjoint FII sources: the /fii/* vertical (list, indicators,
+     * dividends, documents) and the general /tickers catalog. A few dozen funds —
+     * BTHF11, BTCI11, FIIB11, EURO11 — sit in the catalog but are absent from the
+     * vertical, so the catalog loop above never seeds them into fii_indicators and
+     * /api/fii/analysis/{symbol} 404s on a ticker the UI still routes to the FII page
+     * (the front dispatches on subType=fii).
+     *
+     * Seeds those orphans from what the catalog does carry (name, price). The
+     * vertical-only metrics (P/VP, DY, equity, vacancy, portfolio) stay null and the
+     * screen drops those sections, but price history, returns and the chart render.
+     */
+    private List<String> seedOrphanFiis(List<String> covered) {
+        List<BrapiTickerResponse.TickerItem> catalog;
+        try {
+            catalog = tickerClient.fetchTickersBySubType("fii");
+        } catch (Exception e) {
+            log.warn("Failed to fetch the FII ticker catalog — skipping orphan seed: {}", e.getMessage());
+            return List.of();
+        }
+
+        Set<String> inVertical = new HashSet<>(covered);
+        List<String> orphans = new ArrayList<>();
+        for (BrapiTickerResponse.TickerItem item : catalog) {
+            if (item.symbol() == null || inVertical.contains(item.symbol())) continue;
+            try {
+                seedOrphan(item);
+                orphans.add(item.symbol());
+            } catch (Exception e) {
+                log.warn("Failed to seed orphan FII {}: {}", item.symbol(), e.getMessage());
+            }
+        }
+        log.info("Seeded {} FIIs present in the ticker catalog but absent from /fii/list", orphans.size());
+        return orphans;
+    }
+
+    private void seedOrphan(BrapiTickerResponse.TickerItem item) {
+        FiiIndicatorJpaEntity entity = indicatorRepo.findById(item.symbol())
+                .orElseGet(() -> { var e = new FiiIndicatorJpaEntity(); e.setSymbol(item.symbol()); return e; });
+
+        String name = item.longName() != null ? item.longName() : item.name();
+        if (name != null) entity.setName(name);
+        if (item.quote() != null && item.quote().lastPrice() != null) {
+            entity.setPrice(item.quote().lastPrice().doubleValue());
+        }
+        entity.setSyncedAt(Instant.now());
+        indicatorRepo.save(entity);
+    }
+
+    /**
+     * /fii/dividends returns nothing for the orphans, but the legacy
+     * /api/quote/{symbol}?dividends=true still carries payouts for some of them
+     * (BTCI11, FIIB11, EURO11, SCPF11, HUCG11, BIME11 at the time of writing), which is
+     * enough for DY and the Magic Number. One request per symbol — the legacy endpoint
+     * takes a single symbol — but the orphan set is a few dozen, not the full 1000+.
+     * Funds with no payouts anywhere in brapi (BTHF11) just stay empty and the DY
+     * sections stay hidden.
+     */
+    private void syncLegacyDividends(List<String> symbols) {
+        int saved = 0;
+        int withData = 0;
+        for (String symbol : symbols) {
+            try {
+                List<BrapiDividendsResponse.CashDividend> dividends = brapiClient.fetchLegacyDividends(symbol);
+                if (dividends.isEmpty()) continue;
+                withData++;
+
+                Set<String> existing = new HashSet<>();
+                for (FiiDividendEventJpaEntity d : dividendRepo.findBySymbolOrderByPaymentDateDesc(symbol)) {
+                    existing.add(dividendKey(d.getSymbol(), d.getPaymentDate(), d.getRate()));
+                }
+                Instant now = Instant.now();
+                for (var d : dividends) {
+                    String paymentDate = normalizeDate(d.paymentDate());
+                    String key = dividendKey(symbol, paymentDate, d.rate());
+                    if (existing.contains(key)) continue;
+
+                    var entity = new FiiDividendEventJpaEntity();
+                    entity.setSymbol(symbol);
+                    entity.setLabel(d.label());
+                    entity.setRate(d.rate());
+                    entity.setPaymentDate(paymentDate);
+                    entity.setLastDatePrior(normalizeDate(d.lastDatePrior()));
+                    entity.setApprovedOn(normalizeDate(d.approvedOn()));
+                    entity.setRelatedTo(d.relatedTo());
+                    entity.setIsinCode(d.isinCode());
+                    entity.setSyncedAt(now);
+                    dividendRepo.save(entity);
+                    existing.add(key);
+                    saved++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed legacy dividend sync for {}: {}", symbol, e.getMessage());
+            }
+        }
+        log.info("Legacy FII dividends: {} new events across {}/{} orphans", saved, withData, symbols.size());
     }
 
     private void upsertTicker(BrapiFiiListResponse.FiiListItem item) {
