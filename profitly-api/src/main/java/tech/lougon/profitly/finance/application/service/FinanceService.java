@@ -22,6 +22,8 @@ import java.util.stream.Collectors;
 public class FinanceService {
 
     private static final DateTimeFormatter YM_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+    /** Descrição dada ao salário legado quando ele vira renda recorrente. */
+    static final String LEGACY_SALARY_DESCRIPTION = "Salário";
 
     private final ExpenseRepository expenseRepository;
     private final FinanceSettingsRepository settingsRepository;
@@ -52,7 +54,7 @@ public class FinanceService {
 
     @Transactional
     public CurrentPeriodDTO getCurrentPeriod(String userId) {
-        var settings = getOrCreateSettings(userId);
+        var settings = migrateSalaryToRecurringIncome(getOrCreateSettings(userId));
         var expenses = expenseRepository.findByUserId(userId);
 
         // Auto-populate recurring expenses not yet in current period.
@@ -542,6 +544,26 @@ public class FinanceService {
     @Transactional
     public void deleteBudgetLimit(String userId, ExpenseType type) {
         budgetLimitRepository.deleteByUserIdAndType(userId, type);
+    }
+
+    /**
+     * O salário deixou de ser um campo à parte: toda entrada é renda avulsa ou
+     * recorrente. Quem já tinha `netSalary` preenchido teria a renda sumindo da
+     * conta, então o valor é convertido uma vez em renda recorrente "Salário" e o
+     * campo é zerado. Com `netSalary` nulo a passagem vira no-op — é idempotente.
+     */
+    private FinanceSettings migrateSalaryToRecurringIncome(FinanceSettings settings) {
+        BigDecimal salary = settings.netSalary();
+        if (salary == null || salary.compareTo(BigDecimal.ZERO) <= 0) return settings;
+
+        boolean alreadyMigrated = recurringIncomeRepository.findByUserId(settings.userId()).stream()
+                .anyMatch(r -> LEGACY_SALARY_DESCRIPTION.equalsIgnoreCase(r.description()));
+        if (!alreadyMigrated) {
+            recurringIncomeRepository.save(new RecurringIncome(null, settings.userId(),
+                    LEGACY_SALARY_DESCRIPTION, salary, null));
+        }
+        return settingsRepository.save(new FinanceSettings(settings.userId(), settings.resetDay(),
+                null, settings.investmentTarget(), settings.investmentAuto(), settings.savingsTarget()));
     }
 
     private FinanceSettings getOrCreateSettings(String userId) {

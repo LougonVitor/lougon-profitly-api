@@ -109,6 +109,34 @@ class FinanceServiceTest {
     }
 
     @Test
+    void legacySalaryBecomesRecurringIncomeWithoutChangingTotalIncome() {
+        service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null, null, null));
+
+        CurrentPeriodDTO period = service.getCurrentPeriod(USER);
+
+        // A renda não pode cair só porque o campo saiu da tela.
+        assertThat(period.totalIncome()).isEqualByComparingTo(bd(5000));
+        assertThat(period.netSalary()).isNull();
+        assertThat(service.getRecurringIncome(USER))
+                .singleElement()
+                .satisfies(r -> {
+                    assertThat(r.description()).isEqualTo("Salário");
+                    assertThat(r.amount()).isEqualByComparingTo(bd(5000));
+                });
+    }
+
+    @Test
+    void salaryMigrationRunsOnlyOnce() {
+        service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null, null, null));
+
+        service.getCurrentPeriod(USER);
+        CurrentPeriodDTO second = service.getCurrentPeriod(USER);
+
+        assertThat(service.getRecurringIncome(USER)).hasSize(1);
+        assertThat(second.totalIncome()).isEqualByComparingTo(bd(5000)); // não duplica a renda
+    }
+
+    @Test
     void totalSpentExcludesInvestmentAndSavedIsWhatIsLeft() {
         investedStub = bd(1000);
         service.updateSettings(USER, new FinanceSettingsRequest(10, bd(5000), null, null, bd(800)));
