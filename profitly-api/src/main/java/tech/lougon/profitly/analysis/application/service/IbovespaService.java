@@ -22,9 +22,12 @@ public class IbovespaService {
     private static final String IBOV_SYMBOL = "^BVSP";
     // Benchmark indices served from this cache. IBOV is the Dashboard widget and the
     // stock "vs IBOV" chart; IFIX is the FII "vs IFIX" chart. brapi historical symbols.
+    // IFIX itself (IFIX.SA) only has 1 historical bar on brapi's stocks/historical endpoint
+    // (works fine for current quote, but /api/v2/stocks/historical ignores range/interval for
+    // it) — XFIX11, an ETF that tracks IFIX 1:1, has full real history and is used as a proxy.
     private static final java.util.Map<String, String> INDEX_SYMBOLS = java.util.Map.of(
             "ibov", IBOV_SYMBOL,
-            "ifix", "IFIX.SA");
+            "ifix", "XFIX11");
     // Cache keys are brapi ranges (Yahoo-style suffixes). Covers both the Dashboard
     // IBOV widget (1d/5d/1mo/6mo/1y/5y) and the ticker "vs IBOV" chart (which uses
     // the same 1m/3m/6m/1y/2y/5y/10y/max vocabulary as stock price history —
