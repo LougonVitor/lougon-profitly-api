@@ -28,6 +28,7 @@ SaaS de acompanhamento de carteira de investimentos B3. Backend Java 21 / Spring
 - Bancos não reportam EBIT/netIncome/marketCap: usar fallbacks (`cleanEbit`, `netIncomeFromContinuingOps`, `netIncomeApplicableToCommonShares`) e aceitar nulos
 - brapi: `/api/v2/fii/list` e `/treasury/list` aceitam `limit=10000` (uma chamada traz tudo); `/api/v2/tickers` pagina com `subType=stock|unit|bdr|fidc|fip`; `/funds/list?assetType=` só tem fiagro/fiinfra
 - brapi crypto (`/api/v2/crypto`): `marketCap` vem SEMPRE 0 (ranquear por volume); aceita `range`/`interval` mas `range=max` limita a ~1000 barras diárias (~2,7 anos); volume do histórico vem em unidades da moeda (fracionário), o da cotação em BRL; `currencyRateFromUSD` dá o câmbio usado
+- **`IFIX.SA` não tem histórico real na brapi**: `/api/v2/stocks/historical` devolve só 1 barra pra esse símbolo (range/interval ignorados), diferente de `^BVSP` que funciona normal — resultado era o gráfico "vs IFIX" do FII mostrando só um tracinho no canto direito. `IbovespaService` usa **`XFIX11`** (ETF que replica o IFIX 1:1, tem histórico completo desde ~nov/2020) como proxy no lugar de `IFIX.SA`
 
 ## Convenções de trabalho
 
